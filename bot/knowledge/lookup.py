@@ -3847,6 +3847,54 @@ def _says_a_shape(shapes, typed, forms):
     return False
 
 
+def _only_how_it_is_asked(words):
+    """True when the key words matched after the subject are only question and grammar words."""
+    said = [word for phrase in words for word in str(phrase).lower().split()]
+    return all(word in ASK_FRAME or word in GRAMMAR_ONLY for word in said)
+
+
+def _stretched(key_words, span, typed):
+    """True when the line reached a one-word subject only through another form of the key word.
+
+    The word as typed, or its plain plural or singular, is the word; anything further (tips for
+    tipping, speed for speeding, cook for cooking) is a form the matcher allows, and on its own,
+    with nothing but the ask beside it, it is too weak to say the line is about the row.
+    """
+    if len(span) != 1 or not typed or span[0] >= len(typed):
+        return False
+    said = typed[span[0]]
+    for phrase in key_words or ():
+        word = str(phrase).lower()
+        if " " in word:
+            return False  # a phrase is a run of words the line said, not a form of one
+        if said in (word, word + "s", word + "es") or word in (said + "s", said + "es"):
+            return False
+    return bool(key_words)
+
+
+# Words that describe a thing without naming a different one: "a popular breakfast food" is still
+# breakfast, "healthy foods for my cat" still the cat's food.
+DESCRIBERS = frozenset("""
+    popular good best better great nice new old healthy healthier common general basic simple easy
+    quick main top favourite favorite different important usual normal typical cheap expensive big
+    small little long short real proper right whole full own other same certain several various
+    """.split())
+
+
+def _named_beside(typed, span, covered):
+    """True when a word right beside the subject names something no part of the row matched."""
+    if not span or not typed:
+        return False
+    used = set(covered)
+    for index in (min(span) - 1, max(span) + 1):
+        if 0 <= index < len(typed) and index not in used:
+            word = typed[index]
+            if len(word) > 2 and word.isalpha() and word not in GRAMMAR_ONLY \
+                    and word not in ASK_FRAME and word not in DESCRIBERS:
+                return True
+    return False
+
+
 def score(item, forms, typed=None, seen=None, frame=True, framed=False):
     """The entry's score for a line, or 0 when it is not about the entry.
 
@@ -3913,6 +3961,8 @@ def score(item, forms, typed=None, seen=None, frame=True, framed=False):
     total = 0
     covered = []
     first = ()
+    rest_said = []  # the key words the parts after the subject matched, to tell an ask from a fact
+    first_said = ()
     removal = _says_removal(forms)
     grouped = any(isinstance(part, (tuple, list, frozenset, set))
                   for part in (item.key or ()))
@@ -3969,6 +4019,14 @@ def score(item, forms, typed=None, seen=None, frame=True, framed=False):
         covered.extend(span)
         if index == 0:
             first = span
+            first_said = words
+        elif weight:
+            if _only_how_it_is_asked(words):
+                # The part scored on the ask ("what is" outweighs a word), but it may reach a real
+                # word of the line too: `resting-heart-rate` has "what is" and "healthy" in one part.
+                real = [hit for hit in _part_matches(part, forms) if not _only_how_it_is_asked(hit[1])]
+                words = real[0][1] if real else words
+            rest_said.extend(words)
     if grouped and not first:
         return 0
     # A stated complaint is one signal: "i have tinnitus" names the subject and asks nothing,
@@ -4019,6 +4077,20 @@ def score(item, forms, typed=None, seen=None, frame=True, framed=False):
             if not _a_part_the_line_does_not_have(word, parts_said):
                 return 0
     if typed and _misspelt_avoid(item, typed):
+        return 0
+    if grouped and first and typed and not item.report and not item.shape \
+            and _only_how_it_is_asked(rest_said) \
+            and (_named_beside(typed, first, covered) or _stretched(first_said, first, typed)):
+        # The subject, and the rest of the key reached only through how the line asks ("what",
+        # "what are", "my"), is a single signal. When the word right beside the subject names
+        # something the row never mentions, the line is about a different thing that shares the
+        # word: "examples of biotic factors" is not the maths of factors, "the roman numeral for
+        # 5" is not the Romans in Britain. Words further off are only the setting ("i'm learning
+        # about volcanoes in school, what is a volcano" is still the volcano), and a plain
+        # describer beside it ("a popular breakfast food") does not change the thing.
+        # The same single signal is not enough when the subject itself was only reached through a
+        # stretched form of the word: "what are some general tips" is advice, and the row keys
+        # "tipping"; "what is high-speed rail" is a train, and the row keys "speeding".
         return 0
     failing_at = _keeps_failing_at(forms, seen)
     if failing_at is not None and _keeping_row(item) and (
