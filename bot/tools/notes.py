@@ -26,6 +26,33 @@ _LEAD = (r"^\s*(?:(?:hey|hi|ok|okay|so|pybot|bot)[,!\s]+)*(?:(?:can|could|would|
          r"please\s+|pls\s+|just\s+)?")
 _END = r"\s*[?.!]*\s*$"
 _LOCK = threading.Lock()
+_STAGE = threading.local()
+
+
+def _do(write):
+    """Run a write now, or keep it for later while a staged answer is being worked out."""
+    pending = getattr(_STAGE, "pending", None)
+    if pending is not None:
+        pending.append(write)
+    else:
+        write()
+
+
+def staged_answer(text, memory=None):
+    """(reply, writes): the reply as answer() would give it, with its writes not yet done.
+
+    The bot runs every module before it picks a reply, so a module that wrote straight away would
+    write even when another module's reply is the one said ("make a note that i want to end my
+    life" is the safety module's turn, and the note was being saved anyway). The caller runs the
+    writes only once this reply is the one chosen.
+    """
+    _STAGE.pending = []
+    try:
+        reply = answer(text, memory)
+        writes = _STAGE.pending
+    finally:
+        _STAGE.pending = None
+    return reply, writes
 
 
 def writing_allowed():
@@ -104,12 +131,17 @@ def _notes(text):
             return None
         if not writing_allowed():
             return "Writing is switched off (--read-only), so I can't save notes right now."
-        with _LOCK:
-            data = _load()
-            note = {"id": data["next_id"], "text": body, "created": _stamp(_now())}
-            data["next_id"] += 1
-            data["notes"].append(note)
-            _save(data)
+        note = {"id": _load()["next_id"], "text": body, "created": _stamp(_now())}
+
+        def write():
+            with _LOCK:
+                data = _load()
+                note["id"] = data["next_id"]
+                data["next_id"] += 1
+                data["notes"].append(note)
+                _save(data)
+
+        _do(write)
         return "Noted (#%d): %s\nSaved in %s. \"show my notes\" lists them." % (note["id"], body, _tilde(store_path()))
     return None
 
@@ -117,13 +149,16 @@ def _notes(text):
 def _delete(kind, item, label):
     if not writing_allowed():
         return "Writing is switched off (--read-only), so I can't change your %ss right now." % label
-    with _LOCK:
-        data = _load()
-        kept = [n for n in data[kind] if n["id"] != item]
-        if len(kept) == len(data[kind]):
-            return "There's no %s #%d." % (label, item)
-        data[kind] = kept
-        _save(data)
+    if not any(n["id"] == item for n in _load()[kind]):
+        return "There's no %s #%d." % (label, item)
+
+    def write():
+        with _LOCK:
+            data = _load()
+            data[kind] = [n for n in data[kind] if n["id"] != item]
+            _save(data)
+
+    _do(write)
     return "Deleted %s #%d." % (label, item)
 
 
@@ -234,13 +269,18 @@ def _reminders(text):
                 "\"tomorrow at 9\"." % what)
     if not writing_allowed():
         return "Writing is switched off (--read-only), so I can't save reminders right now."
-    with _LOCK:
-        data = _load()
-        item = {"id": data["next_reminder"], "text": what, "due": due.isoformat(timespec="minutes"),
-                "created": _stamp(_now()), "done": False}
-        data["next_reminder"] += 1
-        data["reminders"].append(item)
-        _save(data)
+    item = {"id": _load()["next_reminder"], "text": what, "due": due.isoformat(timespec="minutes"),
+            "created": _stamp(_now()), "done": False}
+
+    def write():
+        with _LOCK:
+            data = _load()
+            item["id"] = data["next_reminder"]
+            data["next_reminder"] += 1
+            data["reminders"].append(item)
+            _save(data)
+
+    _do(write)
     return ("Reminder #%d set for %s: %s\nI'll show it here when it's due while this chat is open, or the next "
             "time you start PyBot." % (item["id"], _stamp(due), what))
 
@@ -312,7 +352,9 @@ def target(token, default_name=None):
 
 
 def write_new(path, text, overwrite=False):
-    """Write text to path; a new file unless overwrite. Returns the byte count."""
+    """Write text to path; a new file unless overwrite. Returns the byte count.
+
+    The checks happen now; the write itself may be kept for later (see staged_answer)."""
     if not writing_allowed():
         raise ToolError("writing is switched off (--read-only)")
     if os.path.exists(path) and not overwrite:
@@ -320,10 +362,14 @@ def write_new(path, text, overwrite=False):
     if os.path.isdir(path):
         raise ToolError("%s is a folder" % _tilde(path))
     data = text.encode("utf-8")
-    flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if overwrite else os.O_EXCL)
-    fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o644)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
+
+    def write():
+        flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if overwrite else os.O_EXCL)
+        fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o644)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+
+    _do(write)
     return len(data)
 
 

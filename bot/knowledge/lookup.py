@@ -5983,17 +5983,37 @@ def _the_key_names_the_thing(item, thing):
     fence" is not a definition of a boundary, "sports wash" is not a sports bra - so the phrase
     has to be as long as the thing.
     """
+    phrases = _key_phrases(item).get(len(thing))
+    if not phrases:
+        return False
     wanted = [_forms(word) for word in thing]
-    for part in item.key:
-        for alternative in (part if isinstance(part, tuple) else (part,)):
-            if not isinstance(alternative, str):
-                continue
-            words = alternative.lower().split()
-            if len(words) != len(wanted):
-                continue
-            if all(_forms(word) & want for word, want in zip(words, wanted)):
-                return True
+    for words in phrases:
+        if all(_forms(word) & want for word, want in zip(words, wanted)):
+            return True
     return False
+
+
+# Every key phrase of an entry as lower-case words, grouped by how many words it has. Entries do
+# not change once the knowledge base is loaded, but the definition reader above was lowering and
+# splitting every phrase of every entry on every call: 575,000 calls and 20 million splits for one
+# line ("what is the latest news on the artemis program" took 7 seconds). Built once per entry
+# here instead; the entry's key tuple is kept beside it, so a key that is replaced is read again.
+_KEY_PHRASES = {}
+
+
+def _key_phrases(item):
+    key = item.key
+    found = _KEY_PHRASES.get(id(item))
+    if found is not None and found[0] is key:
+        return found[1]
+    by_length = {}
+    for part in key:
+        for alternative in (part if isinstance(part, tuple) else (part,)):
+            if isinstance(alternative, str):
+                words = alternative.lower().split()
+                by_length.setdefault(len(words), []).append(words)
+    _KEY_PHRASES[id(item)] = (key, by_length)
+    return by_length
 
 
 # --- a line that is only the name of a thing --------------------------------------------------

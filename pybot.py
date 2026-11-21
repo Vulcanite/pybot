@@ -90,6 +90,7 @@ def answer(runtime, text, memory):
     start = time.perf_counter()
     try:
         result = runtime.turn(text, memory)
+        result = _search_instead_of_shrugging(text, memory, result)
         said = str(result["reply"]).strip("\n")
         if "\n" in said:
             # Command output: kept as printed (indents, blank lines in a file), ends trimmed.
@@ -100,6 +101,15 @@ def answer(runtime, text, memory):
     except Exception:  # noqa: BLE001 - keep the bot's interface: always one reply
         reply, module = "Hello!", None
     return reply, module, time.perf_counter() - start
+
+
+def _search_instead_of_shrugging(text, memory, result):
+    """After the turn: a shrug from the bot becomes a web search (bot/tools/fallback_search.py)."""
+    try:
+        from bot.tools import fallback_search
+    except Exception:  # noqa: BLE001 - no tools, the bot as it was
+        return result
+    return fallback_search.improve(text, memory, result)
 
 
 def details(module, seconds):

@@ -125,6 +125,13 @@ class Replies(Scratch):
         said = self.reply("search for supersecret in .")
         self.assertIn("No matches", said)
 
+    def test_a_capped_count_says_so(self):
+        with open(os.path.join(self.dir, "app", "many.py"), "w") as handle:
+            handle.write("# TODO\n" * 12)
+        said = self.reply("search for TODO in app")
+        self.assertIn("at least", said)
+        self.assertIn("may be more", said)
+
     def test_secret_values_are_masked(self):
         said = self.reply("search for password in .")
         self.assertIn("config.ini", said)

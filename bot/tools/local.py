@@ -33,6 +33,9 @@ folder).
 import os
 import re
 
+# grep stops after this many matches in one file, so one huge file cannot fill the reply.
+GREP_PER_FILE = 5
+
 # Folders not worth searching: tools' caches and other people's code.
 PRUNE = (".git", "node_modules", "__pycache__", ".venv", "venv", ".cache", ".npm", ".nvm",
          ".cargo", ".rustup", ".mypy_cache", ".pytest_cache", ".tox", "dist", "build", "snap",
@@ -422,7 +425,7 @@ def _list(text):
 
 
 def _grep_argv(pattern, root):
-    argv = ["grep", "-rnIi", "--color=never", "-m", "5"]
+    argv = ["grep", "-rnIi", "--color=never", "-m", str(GREP_PER_FILE)]
     for name in PRUNE + tuple(d for d in SECRET_DIRS if "/" not in d):
         argv.append("--exclude-dir=" + name)
     for glob in SECRET_GLOBS:

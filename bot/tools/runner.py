@@ -14,7 +14,7 @@ import subprocess
 import time
 
 from . import ToolError
-from .local import is_secret
+from .local import GREP_PER_FILE, is_secret
 
 TIMEOUT = 20
 MAX_OUTPUT = 300_000
@@ -160,18 +160,23 @@ def _read(plan, lines, err, code):
             return "No matches for \"%s\" in %s." % (plan.extra["query"], tidy(plan.extra["root"]))
         if code > 1 and not lines:
             return "grep could not search there: %s." % (problem or "unknown error")
-        files = []
+        per_file = {}
         shown = []
         for line in lines:
             path, _, rest = line.partition(":")
             number, _, text = rest.partition(":")
-            if path not in files:
-                files.append(path)
+            per_file[path] = per_file.get(path, 0) + 1
             if len(shown) < limit and not is_secret(path):
                 shown.append("%s:%s  %s" % (tidy(path), number, _mask(text.strip())[:160]))
-        return "%d matching %s in %d %s:\n%s" % (
-            len(lines), "line" if len(lines) == 1 else "lines", len(files), "file" if len(files) == 1 else "files",
-            "\n".join("  " + s for s in shown) + _more(len(lines), len(shown)))
+        # grep stops at PER_FILE matches in each file (-m), so a file at the cap may hold more:
+        # the count says so instead of passing a floor off as the total.
+        capped = [p for p, n in per_file.items() if n >= GREP_PER_FILE]
+        count = "%s%d matching %s" % ("at least " if capped else "", len(lines), "line" if len(lines) == 1 else "lines")
+        note = ("\n(I stop at %d per file; %d %s hit that, so there may be more.)"
+                % (GREP_PER_FILE, len(capped), "file" if len(capped) == 1 else "files")) if capped else ""
+        return "%s in %d %s:\n%s%s" % (
+            count, len(per_file), "file" if len(per_file) == 1 else "files",
+            "\n".join("  " + s for s in shown) + _more(len(lines), len(shown)), note)
     if kind == "file":
         path = plan.extra["path"]
         if code != 0:

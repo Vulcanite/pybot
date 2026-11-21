@@ -216,7 +216,10 @@ class Modules(unittest.TestCase):
         cls.runtime = runtime
 
     def turn(self, text, memory=None):
-        return self.runtime.turn(text, {} if memory is None else memory)
+        """A turn as the chat runs it: the bot's turn, then the search in place of a shrug."""
+        from bot.tools import fallback_search
+        memory = {} if memory is None else memory
+        return fallback_search.improve(text, memory, self.runtime.turn(text, memory))
 
     @mock.patch.dict(os.environ, {"EXA_API_KEY": "test", "PYBOT_WEB": "1"})
     def test_an_explicit_search_takes_the_turn(self):
@@ -232,10 +235,13 @@ class Modules(unittest.TestCase):
         self.assertNotEqual(result["module"], "web_search")
 
     @mock.patch.dict(os.environ, {"EXA_API_KEY": "test", "PYBOT_WEB": "1"})
-    def test_a_known_answer_is_not_replaced(self):
-        with mock.patch.object(exa, "search", return_value=FAKE_RESULTS):
-            result = self.turn("how do i boil an egg")
-        self.assertNotIn(result["module"], ("web_search", "web_lookup"))
+    def test_a_known_answer_is_not_replaced_and_no_search_is_made(self):
+        # These were each searched, and the result thrown away, when the lookup was a module.
+        for line in ("how do i boil an egg", "what's the capital of peru", "what's 15% of 240",
+                     "how many weeks in a year"):
+            with mock.patch.object(exa, "search", side_effect=AssertionError("searched: " + line)):
+                result = self.turn(line)
+            self.assertNotIn(result["module"], ("web_search", "web_lookup"), line)
 
     @mock.patch.dict(os.environ, {"EXA_API_KEY": "test", "PYBOT_WEB": "1"})
     def test_a_question_the_bot_would_shrug_at_is_looked_up(self):
@@ -246,6 +252,16 @@ class Modules(unittest.TestCase):
             result = self.turn("what is the latest news on the mars mission")
         self.assertEqual(result["module"], "web_lookup")
         self.assertIn("news.example", result["reply"])
+
+    @mock.patch.dict(os.environ, {"EXA_API_KEY": "test", "PYBOT_WEB": "1"})
+    def test_the_conversation_remembers_the_reply_that_was_said(self):
+        results = [{"title": "Mars", "url": "https://news.example/mars", "published": "",
+                    "highlights": ["The latest news on the Mars mission is that the lander touched down on Tuesday."]}]
+        memory = {}
+        with mock.patch.object(exa, "search", return_value=results):
+            result = self.turn("what is the latest news on the mars mission", memory)
+        self.assertEqual(memory["turns"][-1]["bot"], result["reply"])
+        self.assertEqual(memory["web_results"], ["https://news.example/mars"])
 
     @mock.patch.dict(os.environ, {"PYBOT_WEB": "1"})
     def test_a_site_check_takes_the_turn(self):

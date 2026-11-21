@@ -101,11 +101,9 @@ is picked from what came back by word overlap. No model is involved at any step.
 | Module | Fires on | Does |
 |---|---|---|
 | `bot/modules/web_search.py` | "search for ...", "look up ...", "google ...", "look that up" | Exa search, says the best sentences and the source |
-| `bot/modules/web_lookup.py` | a question about the world that the bot would otherwise shrug at ("I'd rather not guess", "I can't see the news from here") | the same search, in place of the shrug |
+| `bot/tools/fallback_search.py` (run by `pybot.py` after the turn) | a question about the world whose chosen reply was a shrug ("I'd rather not guess", "I can't see the news from here") | the same search, in place of the shrug; it never runs when the bot had a real answer |
 | `bot/modules/web_inspect.py` | "is github.com down", "check the headers on example.com", "what does example.com say", a bare link, "open the first one" | status, timing, TLS certificate and security headers, or the page's opening text through [agent-browser](https://github.com/vercel-labs/agent-browser) |
-
 | `bot/modules/local_tools.py` | "find all python files in src", "search for TODO in ~/projects", "show me README.md", "what's in ~/Downloads", "git status", "how much disk space do i have", "what's using port 8080", "is ollama running" | turns the line into one fixed, read-only command (find, grep, head, ls, du, wc, git, df, free, ps, ss, pgrep), runs it without a shell, and says what it found |
-
 | `bot/modules/local_tools.py` (more) | "how do i use rsync", "history of pybot.py", "who last changed line 40 of x.py", "show me the diff for README.md", "errors in app.log", "what's in package.json", "sha256 of x.iso", "when was x last modified", "what's the ip of github.com", "is port 443 open on example.com" | `man`, `git log/blame/diff`, `grep` for error lines, a manifest reader, `sha256sum`, `stat`, a DNS lookup, a TCP connect |
 | `bot/modules/quick_tools.py` | "what time is it", "time in Tokyo", "convert 5 GB to MB", "1700000000 to a date", "base64 decode ...", "255 to hex", "url encode ...", "pretty print {...}", "generate a uuid / password" | worked out in Python; plain arithmetic and km-to-miles stay with the bot's own maths |
 | `bot/modules/note_tools.py` | "make a note that ...", "show my notes", "remind me to ... in 20 minutes / at 5pm / tomorrow at 9", "my reminders", "save that to notes.md", "save example.com as markdown" | notes and reminders in `~/.pybot/notes.json`; the chat prints reminders when they fall due |
@@ -131,8 +129,8 @@ python -m pybot --offline                # the swarm's bot, with no web at all
 
 Without `EXA_API_KEY` the search modules never fire. Site checks only fetch public addresses:
 localhost, private ranges and cloud metadata addresses are refused, every redirect is checked
-again, and the connection is pinned to the address that was checked. `web_lookup` never sends a
-line about the person themselves to the search service. Tests: `python -m unittest discover -s tests`.
+again, and the connection is pinned to the address that was checked. The fallback search never
+sends a line about the person themselves to the search service. Tests: `python -m unittest discover -s tests`.
 
 ## License
 

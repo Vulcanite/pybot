@@ -5210,7 +5210,12 @@ WISH_DEAD_TAIL = (r"(?=\s*(?:$|[.!?]|any\s?more|any\s+longer|at\s+all|no\s?more|
 # exam went badly" is still an exam.
 _SOFTENING = (r"(?:honestly|tbh|for\s+real|seriously|genuinely|no\s+joke|i\s+mean\s+it|"
               r"really|truthfully|lol)\b(?=\s*(?:$|[.!?]))")
-WISH_DEAD_NO_REASON = (r"(?!\s*+,\s*+(?!any\s?more|any\s+longer|at\s+all|no\s?more|now\b|"
+# No possessive `\s*+` (Python 3.11+ only): on 3.8-3.10 it raised "multiple repeat", the runtime
+# skipped this module, and a crisis line got an ordinary reply. `\s*(?!\s)` is the same "every
+# space, and no giving one back" on any version. It matters after the comma: a plain `\s*` gives
+# the space back, the softening test then reads " honestly" and fails, and "i wish i was dead,
+# honestly" lost its card. Before the comma `\s` cannot match "," anyway.
+WISH_DEAD_NO_REASON = (r"(?!\s*,\s*(?!\s)(?!any\s?more|any\s+longer|at\s+all|no\s?more|now\b|"
                        r"tonight\b|today\b|" + _SOFTENING + r"))")
 WISH_DEAD = (
     r"\bi\s+wish\w*\s+i\s+(?:was|were|am)\s+(?:dead|gone|never\s+born)\b"
@@ -12016,3 +12021,45 @@ from ..memory import again as _never_twice  # noqa: E402 - applied once the modu
 # Whatever this module answers, the last thing that happens to it is the earlier-turn
 # check (bot/memory/again.replied): `answers` alone served a card again on 59 deck turns.
 respond = _never_twice.replied(respond)
+
+
+# A crisis said inside a request to keep something: "remind me to take all my pills at once
+# tonight, i want it to be over" reached no arm above, because the line opens as an errand and
+# every arm reads the person's own words from the front. The words after "remind me to", "make a
+# note that" or "jot down" are the person's own line, so when the whole line passes they are read
+# again on their own (and a reminder's "to ..." as the plan it is, "i want to ..."). Searches are left out: "search for how to stop a nosebleed" asked for a
+# search, and the first-aid card would take it from them.
+_KEEPING_FRAME = re.compile(
+    r"^\s*(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|please\s+)?"
+    r"(?:remind\s+me\s+(?:to\s+|that\s+|about\s+)?|set\s+(?:a\s+)?reminder\s+(?:to\s+|for\s+)?|"
+    r"(?:make|take|add|save|write|leave)\s+(?:me\s+)?(?:a\s+)?note\s+(?:that\s+|saying\s+|to\s+self\s+)?|"
+    r"note\s+(?:that\s+|down\s+)|jot\s+(?:down\s+)?(?:that\s+)?)", re.I)
+
+
+def _reading_past_a_keeping_frame(respond_whole):
+    def respond_framed(text, memory):
+        said = respond_whole(text, memory)
+        if said:
+            return said
+        found = _KEEPING_FRAME.match(text or "")
+        rest = text[found.end():].strip() if found else ""
+        if len(rest.split()) < 2:
+            return said
+        # "remind me to take all my pills" is a plan of the person's own: read it the way they
+        # would say it, "i want to take all my pills", as well as the words as they stand.
+        readings = [rest]
+        if re.match(r"\s*(?:remind|set)", text, re.I) and not re.match(r"(?:i|i'm|im|my)\b", rest, re.I):
+            readings.append("i want to " + rest)
+        for reading in readings:
+            said = respond_whole(reading, memory)
+            if said:
+                return said
+        return said
+
+    respond_framed.__name__ = getattr(respond_whole, "__name__", "respond")
+    respond_framed.__doc__ = respond_whole.__doc__
+    respond_framed.checks_earlier_turns = getattr(respond_whole, "checks_earlier_turns", False)
+    return respond_framed
+
+
+respond = _reading_past_a_keeping_frame(respond)

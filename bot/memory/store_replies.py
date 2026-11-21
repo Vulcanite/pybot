@@ -8049,8 +8049,10 @@ def _named_back(who, line):
     # to rewrite at the front: "your mum said your mum is 72" says one person twice and reads as
     # two. The words they used are said back as they were.
     if not re.search(r"\byour\s+" + re.escape(who) + r"\b", line, re.I):
-        line = re.sub(r"^(?:and\s+)?(?:she|he|they)(?:'s|'re|s|re)?\b", whose, line, re.I)
-        line = re.sub(r"^(?:and\s+)?(?:his|her|their)\b", belonging, line, re.I)
+        # flags=, not a fourth positional argument: that slot is re.sub's count, so re.I (2)
+        # was read as "at most two" and "She loves gardening" was never matched.
+        line = re.sub(r"^(?:and\s+)?(?:she|he|they)(?:'s|'re|s|re)?\b", whose, line, flags=re.I)
+        line = re.sub(r"^(?:and\s+)?(?:his|her|their)\b", belonging, line, flags=re.I)
     return line
 
 def _a_relation_in(line):

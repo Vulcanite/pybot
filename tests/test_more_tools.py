@@ -186,6 +186,12 @@ class Modules(Fenced):
         for line, module in cases.items():
             self.assertEqual(self.runtime.turn(line, {})["module"], module, line)
 
+    def test_a_note_is_only_saved_when_its_reply_is_the_one_said(self):
+        self.assertEqual(self.runtime.turn("make a note that i want to end my life", {})["module"], "safety")
+        self.assertEqual(notes._load()["notes"], [])
+        self.assertEqual(self.runtime.turn("make a note that tea is good", {})["module"], "note_tools")
+        self.assertEqual([n["text"] for n in notes._load()["notes"]], ["tea is good"])
+
     def test_the_bots_own_answers_stay(self):
         self.assertNotIn(self.runtime.turn("what's 15% of 240", {})["module"],
                          ("quick_tools", "local_tools", "note_tools"))
