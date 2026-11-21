@@ -132,6 +132,16 @@ localhost, private ranges and cloud metadata addresses are refused, every redire
 again, and the connection is pinned to the address that was checked. The fallback search never
 sends a line about the person themselves to the search service. Tests: `python -m unittest discover -s tests`.
 
+Memory across chats (`bot/tools/profile.py`, `bot/modules/profile_tools.py`): a few things about
+you are kept in `~/.pybot/profile.json` (folder 700, file 600), scored by rules. Always kept:
+"remember that ...", "don't forget ...", and standing rules ("always use metric", "call me Sam",
+"i prefer short answers"). Kept: stable facts (name, job, where you live, the OS and tools you
+use, languages, family and pet names, allergies); a new value replaces the old one. Not kept:
+passing states ("i'm tired today") and anything that looks like a password, key, token or card
+number. A new chat starts with the kept facts, so "what's my name?" works there. "what do you
+remember about me", "forget that i use arch" and "forget everything about me" always work (a bare
+"forget everything" asks first); `--read-only` keeps nothing new.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

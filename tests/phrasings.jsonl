@@ -366,23 +366,23 @@
 {"id": "capability-020", "group": "capability", "line": "can you believe it rained again", "expect": {"capability": false}, "status": "todo", "owner": "B", "note": "not a question about PyBot"}
 {"id": "capability-021", "group": "capability", "line": "you can do it!", "expect": {"capability": false}, "status": "todo", "owner": "B", "note": "not a question about PyBot"}
 {"id": "capability-022", "group": "capability", "line": "can you pass me the salt", "expect": {"capability": false}, "status": "todo", "owner": "B", "note": "not a question about PyBot"}
-{"id": "memory-001", "group": "memory", "line": "remember that I use Arch", "expect": {"stores": "arch"}, "status": "todo", "owner": "C", "note": "persistent memory"}
-{"id": "memory-002", "group": "memory", "line": "my name is Sam", "expect": {"stores": "sam"}, "status": "todo", "owner": "C", "note": "persistent memory"}
-{"id": "memory-003", "group": "memory", "line": "i live in Singapore", "expect": {"stores": "singapore"}, "status": "todo", "owner": "C", "note": "persistent memory"}
-{"id": "memory-004", "group": "memory", "line": "remember my favourite editor is vim", "expect": {"stores": "vim"}, "status": "todo", "owner": "C", "note": "persistent memory"}
-{"id": "memory-005", "group": "memory", "line": "I work as a security engineer", "expect": {"stores": "security engineer"}, "status": "todo", "owner": "C", "note": "persistent memory"}
-{"id": "memory-006", "group": "memory", "line": "I'm tired today", "expect": {"not_stored": true}, "status": "todo", "owner": "C", "note": "a passing mood is not kept"}
-{"id": "memory-007", "group": "memory", "line": "i had pasta for lunch", "expect": {"not_stored": true}, "status": "todo", "owner": "C", "note": "scores too low to keep"}
-{"id": "memory-008", "group": "memory", "line": "it's raining", "expect": {"not_stored": true}, "status": "todo", "owner": "C", "note": "persistent memory"}
-{"id": "memory-009", "group": "memory", "line": "my password is hunter2", "expect": {"not_stored": true, "never_stored": "hunter2"}, "status": "todo", "owner": "C", "note": "a secret is never kept"}
-{"id": "memory-010", "group": "memory", "line": "my api key is sk-abc123def456", "expect": {"not_stored": true, "never_stored": "sk-abc123"}, "status": "todo", "owner": "C", "note": "a secret is never kept"}
-{"id": "memory-011", "group": "memory", "line": "remember that my card number is 4111 1111 1111 1111", "expect": {"not_stored": true, "never_stored": "4111"}, "status": "todo", "owner": "C", "note": "a secret is never kept, even when asked"}
-{"id": "memory-012", "group": "memory", "line": "what do you remember about me", "expect": {"recalls": ["arch"]}, "status": "todo", "owner": "C", "note": "persistent memory", "before": ["remember that I use Arch"]}
-{"id": "memory-013", "group": "memory", "line": "what's my name?", "expect": {"recalls": ["Sam"]}, "status": "todo", "owner": "C", "note": "persistent memory", "before": ["my name is Sam"]}
-{"id": "memory-014", "group": "memory", "line": "do you remember where I live?", "expect": {"recalls": ["Singapore"]}, "status": "todo", "owner": "C", "note": "persistent memory", "before": ["i live in Singapore"]}
-{"id": "memory-015", "group": "memory", "line": "forget that I use Arch", "expect": {"forgets": "arch"}, "status": "todo", "owner": "C", "note": "persistent memory", "before": ["remember that I use Arch"]}
-{"id": "memory-016", "group": "memory", "line": "forget everything you know about me", "expect": {"forgets": "sam"}, "status": "todo", "owner": "C", "note": "persistent memory", "before": ["my name is Sam", "remember that I use Arch"]}
-{"id": "memory-017", "group": "memory", "line": "actually my name is Alex", "expect": {"stores": "alex", "forgets": "sam"}, "status": "todo", "owner": "C", "note": "a new value replaces the old", "before": ["my name is Sam"]}
+{"id": "memory-001", "group": "memory", "line": "remember that I use Arch", "expect": {"stores": "arch"}, "status": "pass", "owner": "C", "note": "persistent memory"}
+{"id": "memory-002", "group": "memory", "line": "my name is Sam", "expect": {"stores": "sam"}, "status": "pass", "owner": "C", "note": "persistent memory"}
+{"id": "memory-003", "group": "memory", "line": "i live in Singapore", "expect": {"stores": "singapore"}, "status": "pass", "owner": "C", "note": "persistent memory"}
+{"id": "memory-004", "group": "memory", "line": "remember my favourite editor is vim", "expect": {"stores": "vim"}, "status": "pass", "owner": "C", "note": "persistent memory"}
+{"id": "memory-005", "group": "memory", "line": "I work as a security engineer", "expect": {"stores": "security engineer"}, "status": "pass", "owner": "C", "note": "persistent memory"}
+{"id": "memory-006", "group": "memory", "line": "I'm tired today", "expect": {"not_stored": true}, "status": "pass", "owner": "C", "note": "a passing mood is not kept"}
+{"id": "memory-007", "group": "memory", "line": "i had pasta for lunch", "expect": {"not_stored": true}, "status": "pass", "owner": "C", "note": "scores too low to keep"}
+{"id": "memory-008", "group": "memory", "line": "it's raining", "expect": {"not_stored": true}, "status": "pass", "owner": "C", "note": "persistent memory"}
+{"id": "memory-009", "group": "memory", "line": "my password is hunter2", "expect": {"not_stored": true, "never_stored": "hunter2"}, "status": "pass", "owner": "C", "note": "a secret is never kept"}
+{"id": "memory-010", "group": "memory", "line": "my api key is sk-abc123def456", "expect": {"not_stored": true, "never_stored": "sk-abc123"}, "status": "pass", "owner": "C", "note": "a secret is never kept"}
+{"id": "memory-011", "group": "memory", "line": "remember that my card number is 4111 1111 1111 1111", "expect": {"not_stored": true, "never_stored": "4111"}, "status": "pass", "owner": "C", "note": "a secret is never kept, even when asked"}
+{"id": "memory-012", "group": "memory", "line": "what do you remember about me", "expect": {"recalls": ["arch"]}, "status": "pass", "owner": "C", "note": "persistent memory", "before": ["remember that I use Arch"]}
+{"id": "memory-013", "group": "memory", "line": "what's my name?", "expect": {"recalls": ["Sam"]}, "status": "pass", "owner": "C", "note": "persistent memory", "before": ["my name is Sam"]}
+{"id": "memory-014", "group": "memory", "line": "do you remember where I live?", "expect": {"recalls": ["Singapore"]}, "status": "pass", "owner": "C", "note": "persistent memory", "before": ["i live in Singapore"]}
+{"id": "memory-015", "group": "memory", "line": "forget that I use Arch", "expect": {"forgets": "arch"}, "status": "pass", "owner": "C", "note": "persistent memory", "before": ["remember that I use Arch"]}
+{"id": "memory-016", "group": "memory", "line": "forget everything you know about me", "expect": {"forgets": "sam"}, "status": "pass", "owner": "C", "note": "persistent memory", "before": ["my name is Sam", "remember that I use Arch"]}
+{"id": "memory-017", "group": "memory", "line": "actually my name is Alex", "expect": {"stores": "alex", "forgets": "sam"}, "status": "pass", "owner": "C", "note": "a new value replaces the old", "before": ["my name is Sam"]}
 {"id": "chain-001", "group": "chain", "line": "find the biggest log file in ~/projects and then show its errors", "expect": {"chain": ["sized", "loglines"]}, "status": "todo", "owner": "D", "note": "two asks, the second on the first one's result"}
 {"id": "chain-002", "group": "chain", "line": "show me README.md and then count its lines", "expect": {"chain": ["file", "wc"]}, "status": "todo", "owner": "D", "note": "two asks, the second on the first one's result"}
 {"id": "chain-003", "group": "chain", "line": "search for TODO in ~/projects/pybot, then open the first one", "expect": {"chain": ["grep", "file"]}, "status": "todo", "owner": "D", "note": "two asks, the second on the first one's result"}
