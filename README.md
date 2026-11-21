@@ -132,6 +132,14 @@ localhost, private ranges and cloud metadata addresses are refused, every redire
 again, and the connection is pinned to the address that was checked. The fallback search never
 sends a line about the person themselves to the search service. Tests: `python -m unittest discover -s tests`.
 
+### Commands that change things: shown, never run
+
+`bot/modules/suggest_tools.py` (rules in `bot/tools/suggest.py`) takes "delete all .log files in ~/tmp",
+"rm -rf build", "move notes.md to ~/Documents", "kill process 1234", "uninstall docker",
+"git push --force" and the like. PyBot runs none of them. It replies with the exact command to run
+yourself (the safer form where there is one: `rm -i`, `rm -rI`, `mv -i`, `--force-with-lease`), plus a
+warning naming a preview command to run first. Paths outside home and secrets get a refusal instead.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
