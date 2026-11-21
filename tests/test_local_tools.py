@@ -118,6 +118,16 @@ class Replies(Scratch):
         self.assertIn("main.py", said)
         self.assertIn("util.py", said)
 
+    def test_folders_lists_every_folder_but_secrets(self):
+        os.makedirs(os.path.join(self.dir, ".ssh"))
+        for line in ("list all the folders in %s/" % self.dir, "what folders are in here",
+                     "show me the subfolders of this folder"):
+            said = self.reply(line)
+            self.assertIn("Found 3:", said, line)  # app, notes, node_modules; .ssh left out
+            self.assertIn("node_modules", said)
+            self.assertNotIn(".ssh", said)
+            self.assertNotIn("main.py", said)
+
     def test_grep_skips_node_modules_and_secrets(self):
         said = self.reply("search for TODO in .")
         self.assertIn("main.py", said)

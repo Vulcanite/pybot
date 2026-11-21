@@ -169,9 +169,9 @@ def is_secret(path):
                for d in SECRET_DIRS)
 
 
-def _prune_args():
+def _prune_args(caches=True):
     args = ["("]
-    for i, name in enumerate(PRUNE + tuple(d for d in SECRET_DIRS if "/" not in d)):
+    for i, name in enumerate((PRUNE if caches else ()) + tuple(d for d in SECRET_DIRS if "/" not in d)):
         if i:
             args.append("-o")
         args += ["-name", name]
@@ -234,11 +234,14 @@ LINES = re.compile(_LEAD + r"how\s+many\s+lines\s+(?:are\s+|of\s+code\s+)?(?:in|
 COUNT = re.compile(_LEAD + r"how\s+many\s+(?:(?P<kind>" + _KIND_WORDS + r")\s+)?files\s+(?:are\s+)?"
                    r"(?:there\s+)?(?:in|under|inside)\s+" + _THE + _PATH + _FOLDER_WORD + _END, re.I)
 
-LIST = re.compile(_LEAD + r"(?:what(?:'s|\s+is)\s+in(?:side)?|what\s+files\s+are\s+in|"
-                  r"(?:the\s+)?list\s+of\s+(?:all\s+)?(?:the\s+)?(?:files|contents|everything)(?:\s+(?:in|of|inside))?|"
-                  r"list(?:\s+(?:all\s+)?(?:the\s+)?(?:files|contents|everything|what's))?(?:\s+(?:in|of|inside))?|ls|"
-                  r"(?:show(?:\s+me)?\s+)?(?:all\s+)?(?:the\s+)?(?:files|contents|everything)\s+(?:in|of|inside))\s+"
-                  + _THE + _PATH + _FOLDER_WORD + _END, re.I)
+_DIRS = r"(?:(?:sub)?folders|(?:sub)?directories|dirs)"
+LIST = re.compile(_LEAD + r"(?:what(?:'s|\s+is)\s+in(?:side)?|what\s+(?:files|" + _DIRS + r")\s+are\s+(?:there\s+)?in|"
+                  r"(?:the\s+)?list\s+of\s+(?:all\s+)?(?:the\s+)?(?:files|contents|everything|" + _DIRS + r")"
+                  r"(?:\s+(?:in|of|inside))?|"
+                  r"list(?:\s+(?:all\s+)?(?:the\s+)?(?:files|contents|everything|what's|" + _DIRS + r"))?"
+                  r"(?:\s+(?:in|of|inside))?|ls|"
+                  r"(?:show(?:\s+me)?\s+)?(?:all\s+)?(?:the\s+)?(?:files|contents|everything|" + _DIRS + r")"
+                  r"\s+(?:in|of|inside))\s+" + _THE + _PATH + _FOLDER_WORD + _END, re.I)
 SHOW_PART = re.compile(_LEAD + r"(?:show(?:\s+me)?\s+|print\s+|read\s+|give\s+me\s+)?(?:the\s+)?"
                        r"(?P<which>first|last|top|bottom)\s+(?P<n>\d{1,4})\s+lines\s+(?:of|in|from)\s+"
                        + _THE + _PATH + _END, re.I)
@@ -421,6 +424,10 @@ def _list(text):
     path = resolve(found.group("path"), "dir")
     if not path:
         return None
+    if re.search(r"\b" + _DIRS + r"\b", text[:found.start("path")], re.I):
+        # "list all the folders in ~": every folder one level down, except the secrets folders
+        argv = ["find", path, "-mindepth", "1", "-maxdepth", "1"] + _prune_args(caches=False) + ["-type", "d", "-print"]
+        return Plan("files", argv, title="folders", limit=60, root=path, sort=True)
     return Plan("listing", ["ls", "-lAh", "--group-directories-first", "--", path], title="listing", limit=40)
 
 

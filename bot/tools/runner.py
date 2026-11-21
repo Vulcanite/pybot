@@ -45,7 +45,9 @@ def _shown(argv):
     text = shlex.join(kept).replace(_HOME + os.sep, "~" + os.sep)
     text = re.sub(r"(?<![\w/])%s(?![\w/])" % re.escape(_HOME), "~", text)
     # find's prune list: "( -name .git -o -name node_modules ... ) -prune -o" -> "<skip caches>"
-    text = re.sub(r"'\(' -name .*? '\)' -prune -o", "<skip .git, node_modules, caches>", text)
+    text = re.sub(r"'\(' -name .*? '\)' -prune -o",
+                  lambda m: "<skip .git, node_modules, caches>" if "-name .git " in m.group(0)
+                  else "<skip secrets folders>", text)
     if folded:
         text += "  (skipping caches and secret files)"
     return text
@@ -127,7 +129,7 @@ def _read(plan, lines, err, code):
     if kind == "files":
         if not lines:
             return "Nothing found%s." % (" (%s)" % problem if problem and code not in (0, 1) else "")
-        found = [tidy(line) for line in lines]
+        found = [tidy(line) for line in (sorted(lines, key=str.lower) if plan.extra.get("sort") else lines)]
         return "Found %d:\n%s" % (len(found), _listed(found, limit))
     if kind == "count":
         return "%d %s in %s." % (len(lines), "file" if len(lines) == 1 else "files", tidy(plan.extra["root"]))
