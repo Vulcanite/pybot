@@ -240,13 +240,28 @@ def _read(plan, lines, err, code):
         if code != 0:
             return "Couldn't list it: %s." % (problem or "unknown error")
         rows = [line for line in lines if not line.startswith("total ")]
-        return "%d entries:\n%s" % (len(rows), _listed(rows, limit))
+        # The names of secrets files and folders are left out too, not only their contents.
+        kept = [row for row in rows if not _secret_row(plan.argv[-1], row)]
+        hidden = len(rows) - len(kept)
+        note = "\n(%d hidden: secrets)" % hidden if hidden else ""
+        return "%d entries:\n%s%s" % (len(kept), _listed(kept, limit), note)
     # "lines" and "table": the output as it is, trimmed.
     if code != 0 and not lines:
         return "It didn't work: %s." % (problem or "exit code %d" % code)
     if not lines:
         return plan.extra.get("empty", "It printed nothing.")
     return _listed([_mask(line.replace(_HOME + os.sep, "~" + os.sep)) for line in lines], limit)
+
+
+def _secret_row(folder, row):
+    """True when a row of `ls -l` output names a secrets file or folder in that folder."""
+    parts = row.split(None, 8)
+    if len(parts) < 9:
+        return False
+    name = parts[8]
+    if row.startswith("l") and " -> " in name:
+        name = name.split(" -> ", 1)[0]
+    return is_secret(os.path.join(folder, name))
 
 
 def _man_summary(cmd, lines):

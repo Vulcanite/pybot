@@ -286,8 +286,10 @@ def answer(text):
     """The reply to a quick ask, or None when the line is not one."""
     if not text or len(text) > 5000:
         return None
+    from .local import tidy_line  # noqa: PLC0415 - "whats the date pls" reads as "what's the date"
+    plain = text.strip()
     for reader in (_time, _stamps, _data, _encodings):
-        said = reader(text.strip())
+        said = reader(plain) or (reader(tidy_line(plain)) if reader is _time else None)
         if said:
             return said
     return None

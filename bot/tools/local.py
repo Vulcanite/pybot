@@ -81,6 +81,19 @@ _PATH = (r"(?P<path>(?:this|current|the\s+current)\s+(?:folder|directory|dir|rep
          r"(?!this\b)\S+)")
 _IN = r"\s+(?:in|inside|within|under|across|through|from|of|on)\s+" + _THE + _PATH + _FOLDER_WORD
 
+# "... please", "... pls", "... thanks": the ask is the same without them.
+_POLITE = re.compile(r"(?:[\s,]+(?:please|pls|plz|thanks|thank\s+you|thx))+\s*(?P<p>[?.!]*)\s*$", re.I)
+# "whats in documents", "wheres my taxes pdf": the apostrophe people skip.
+_NO_APOSTROPHE = re.compile(r"\b(what|where)s\b", re.I)
+
+
+def tidy_line(text):
+    """The line as the patterns read it: spaces folded, a trailing please dropped, "whats" -> "what's"."""
+    text = " ".join((text or "").split())
+    text = _POLITE.sub(lambda m: m.group("p"), text)
+    return _NO_APOSTROPHE.sub(lambda m: m.group(1) + "'s", text)
+
+
 _HERE = re.compile(r"^(?:here|(?:this|current|the\s+current)\s+(?:folder|directory|dir|repo|project)|\.)$",
                    re.I)
 _HOME_NAMES = {"home": "", "home folder": "", "downloads": "Downloads", "desktop": "Desktop",
@@ -201,9 +214,11 @@ def _unquote(text):
 
 # --- the asks, most specific first ------------------------------------------------------------
 
-GIT_STATUS = re.compile(_LEAD + r"(?:show\s+(?:me\s+)?)?(?:the\s+)?git\s+status(?:" + _IN + r")?" + _END, re.I)
-GIT_LOG = re.compile(_LEAD + r"(?:show\s+(?:me\s+)?|what\s+are\s+)?(?:the\s+)?(?:recent|last|latest)\s+"
-                     r"(?:(?P<n>\d{1,3})\s+)?commits(?:" + _IN + r")?" + _END, re.I)
+GIT_STATUS = re.compile(_LEAD + r"(?:show\s+(?:me\s+)?|what(?:'s|\s+is)\s+)?(?:the\s+)?(?:git\s+status(?:" + _IN + r")?|"
+                        r"status\s+of\s+(?:my|the|this|our)\s+(?:git\s+)?(?:repo|repository|project|working\s+tree))"
+                        + _END, re.I)
+GIT_LOG = re.compile(_LEAD + r"(?:show\s+(?:me\s+)?|what\s+are\s+)?(?:the\s+)?(?:(?:recent|last|latest)\s+"
+                     r"(?:(?P<n>\d{1,3})\s+)?commits|git\s+log)(?:" + _IN + r")?" + _END, re.I)
 # "what's changed" alone is as often about a life as a repo, so the line has to say which.
 GIT_CHANGED = re.compile(_LEAD + r"what(?:'s|\s+has|\s+have|\s+is)?\s+changed\s+(?:in\s+(?:the\s+)?"
                          r"(?:code|repo|repository|working\s+tree)|since\s+the\s+last\s+commit|"
@@ -215,6 +230,18 @@ DISK = re.compile(r"\b(?:(?:disk|free|storage|drive)\s+space|how\s+full\s+is\s+(
                   r"(?:disk|drive|ssd)|disk\s+usage)\b(?!\s+of\b)", re.I)
 MEMORY = re.compile(r"\b(?:(?:memory|ram)\s+(?:usage|left|free|used|available)|how\s+much\s+"
                     r"(?:memory|ram)\b)", re.I)
+# "how much memory does a goldfish have" is not about this machine: the line has to say it is
+# (my, this computer, ram, free, left), or say nothing else at all ("how much memory?").
+_MACHINE_MEMORY = re.compile(r"\b(?:my|i|this|the\s+(?:computer|machine|system|pc|laptop|server))\b|\bram\b|"
+                             r"\b(?:usage|left|free|used|available|in\s+use)\b|^\W*how\s+much\s+memory\W*$", re.I)
+_SOMEONE_ELSES_MEMORY = re.compile(r"\bhow\s+much\s+(?:memory|ram)\s+(?:does|do|did|can|could|has|will|would)\s+"
+                                  r"(?!i\b|it\b|(?:my|this|the|our)\s+(?:computer|machine|system|pc|laptop|server|box|mac)\b)",
+                                  re.I)
+CPU = re.compile(r"\b(?:cpu|processor)\s+(?:usage|load|use)\b|\bhow\s+(?:busy|loaded)\s+is\s+(?:my|the)\s+"
+                 r"(?:cpu|processor)\b", re.I)
+PROCESSES = re.compile(_LEAD + r"(?:(?:what|which)\s+(?:processes|programs)\s+are\s+(?:running|open)(?:\s+(?:now|right\s+now))?|"
+                       r"(?:list|show(?:\s+me)?)\s+(?:all\s+)?(?:the\s+|my\s+)?(?:running\s+)?processes|"
+                       r"(?:the\s+)?running\s+processes|ps(?:\s+aux)?)" + _END, re.I)
 TOP = re.compile(r"\b(?:what(?:'s|\s+is)|which\s+(?:process(?:es)?|programs?|apps?))\s+(?:is\s+|are\s+)?"
                  r"(?:using|eating|hogging|taking)\s+(?:up\s+)?(?:the\s+most\s+|all\s+(?:the|my)\s+|my\s+)?"
                  r"(?P<what>memory|ram|cpu)\b", re.I)
@@ -225,13 +252,15 @@ RUNNING = re.compile(_LEAD + r"is\s+(?P<name>[a-z0-9][a-z0-9_.+-]{1,40})\s+(?:ru
                      + _END, re.I)
 UPTIME = re.compile(r"\b(?:uptime|how\s+long\s+has\s+(?:the|my|this)\s+(?:computer|machine|system|pc|laptop)"
                     r"\s+been\s+(?:on|up|running))\b", re.I)
+_A_DOMAIN = re.compile(r"^(?:[a-z0-9-]+\.)+(?:com|org|net|io|dev|ai|app|co|uk|de|fr|edu|gov|me|info|sh|so|"
+                       r"xyz|tech|cloud|site|page|us|ca|au|in|jp|cn|nl|eu|ly|gg|tv|fm)$", re.I)
 _NOT_PROGRAMS = frozenset("it this that he she they my the your our everything anything something "
                           "someone everyone nothing life work".split())
 
 SIZE = re.compile(_LEAD + r"(?:how\s+(?:big|large)\s+is|(?:what(?:'s|\s+is)\s+)?the\s+size\s+of|size\s+of|"
                   r"disk\s+usage\s+of)\s+" + _THE + _PATH + _FOLDER_WORD + _END, re.I)
 LINES = re.compile(_LEAD + r"how\s+many\s+lines\s+(?:are\s+|of\s+code\s+)?(?:in|of)\s+" + _THE + _PATH + _END, re.I)
-COUNT = re.compile(_LEAD + r"how\s+many\s+(?:(?P<kind>" + _KIND_WORDS + r")\s+)?files\s+(?:are\s+)?"
+COUNT = re.compile(_LEAD + r"(?:how\s+many|count\s+(?:up\s+)?(?:all\s+)?(?:the\s+|my\s+)?)\s*(?:(?P<kind>" + _KIND_WORDS + r")\s+)?files\s+(?:are\s+)?"
                    r"(?:there\s+)?(?:in|under|inside)\s+" + _THE + _PATH + _FOLDER_WORD + _END, re.I)
 
 _DIRS = r"(?:(?:sub)?folders|(?:sub)?directories|dirs)"
@@ -242,22 +271,39 @@ LIST = re.compile(_LEAD + r"(?:what(?:'s|\s+is)\s+in(?:side)?|what\s+(?:files|" 
                   r"(?:\s+(?:in|of|inside))?|ls|"
                   r"(?:show(?:\s+me)?\s+)?(?:all\s+)?(?:the\s+)?(?:files|contents|everything|" + _DIRS + r")"
                   r"\s+(?:in|of|inside))\s+" + _THE + _PATH + _FOLDER_WORD + _END, re.I)
+MY_FOLDERS = re.compile(_LEAD + r"(?:list|show(?:\s+me)?|what\s+are)\s+(?:all\s+)?(?:of\s+)?my\s+" + _DIRS + _END, re.I)
 SHOW_PART = re.compile(_LEAD + r"(?:show(?:\s+me)?\s+|print\s+|read\s+|give\s+me\s+)?(?:the\s+)?"
                        r"(?P<which>first|last|top|bottom)\s+(?P<n>\d{1,4})\s+lines\s+(?:of|in|from)\s+"
                        + _THE + _PATH + _END, re.I)
-SHOW = re.compile(_LEAD + r"(?:show(?:\s+me)?|read|cat|open|print|display|view)\s+(?:the\s+)?"
-                  r"(?:file\s+|contents\s+of\s+(?:the\s+)?(?:file\s+)?)?" + _PATH + _END, re.I)
+SHOW = re.compile(_LEAD + r"(?:show(?:\s+me)?|read|cat|open|print|display|view)\s+(?:(?:the|this|that)\s+(?=file\b)|the\s+)?"
+                  r"(?:file\s*:?\s+|contents\s+of\s+(?:the\s+)?(?:file\s+)?)?" + _PATH + _END, re.I)
+# "what's in README.md": LIST's words, said of a file.
+SHOW_WHATS_IN = re.compile(_LEAD + r"what(?:'s|\s+is)\s+in(?:side)?\s+" + _THE + _PATH + _END, re.I)
+# "head README.md", "tail -n 20 app.log": the command typed as it is.
+HEAD_TAIL = re.compile(r"^\s*(?P<tool>head|tail)(?:\s+-n\s*(?P<n>\d{1,4})|\s+-(?P<m>\d{1,4}))?\s+(?:--\s+)?(?P<path>\S+)\s*$",
+                       re.I)
+# "open the readme": the few files every project has, named without their ending.
+_USUAL_FILES = frozenset("readme license licence changelog contributing makefile dockerfile authors".split())
 
 GREP_IN = re.compile(_LEAD + r"(?:search|grep|look|find|check)(?:\s+for)?\s+(?P<q>\"[^\"]+\"|'[^']+'|`[^`]+`|.+?)"
                      + _IN + _END, re.I)
 GREP_WHICH = re.compile(_LEAD + r"(?:which|what)\s+files\s+(?:mention|contain|reference|use|include|say|have|import)s?"
-                        r"\s+(?P<q>\"[^\"]+\"|'[^']+'|`[^`]+`|.+?)(?:" + _IN + r")?" + _END, re.I)
+                        r"\s+(?P<q>\"[^\"]+\"|'[^']+'|`[^`]+`|.+?)(?:\s+in\s+(?:them|it)|" + _IN + r")?" + _END, re.I)
+# "search ~/projects for TODO", "search inside ~/projects for helper": the folder first. The
+# folder has to exist, so "search google for cats" stays a web search.
+GREP_PLACE_FIRST = re.compile(_LEAD + r"(?:search|grep|look|check)\s+(?:(?:in|inside|within|through)\s+)?" + _THE + _PATH
+                              + _FOLDER_WORD + r"\s+for\s+(?P<q>\"[^\"]+\"|'[^']+'|`[^`]+`|.+?)" + _END, re.I)
+# "any TODOs in ~/projects?": one word, and a folder or file that exists.
+GREP_ANY = re.compile(_LEAD + r"(?:are\s+there\s+)?any\s+(?P<q>\"[^\"]+\"|'[^']+'|`[^`]+`|[A-Za-z_][\w.-]*)" + _IN + _END, re.I)
+# "grep -r TODO .": a grep typed as a command; only its pattern and folder are kept.
+GREP_TYPED = re.compile(r"^\s*grep\s+(?:-[A-Za-z]+\s+)*(?P<q>\"[^\"]+\"|'[^']+'|[^\s-]\S*)(?:\s+(?P<path>\S+))?\s*$")
 GREP_WHERE = re.compile(_LEAD + r"where\s+(?:is|are)\s+(?P<q>\"[^\"]+\"|'[^']+'|`[^`]+`|\S+)\s+"
                         r"(?:used|mentioned|called|imported|referenced)(?:" + _IN + r")?"
                         + _END, re.I)
 
-FIND_KIND = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?|get|locate|search\s+for|look\s+for)\s+"
-                       r"(?:all\s+|the\s+|my\s+|any\s+)*(?P<kind>" + _KIND_WORDS + r")\s+files"
+FIND_KIND = re.compile(_LEAD + r"(?:(?:find|list|show(?:\s+me)?|get|locate|search\s+for|look\s+for|are\s+there|"
+                       r"do\s+i\s+have)\s+|(?=any\s))"
+                       r"(?:all\s+|the\s+|my\s+|any\s+|me\s+)*(?P<kind>" + _KIND_WORDS + r")\s+files"
                        r"(?:" + _IN + r")?" + _END, re.I)
 FIND_BIG = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?|what\s+are)?\s*(?:the\s+)?(?:(?P<top>\d{1,3})\s+)?"
                       r"(?:largest|biggest)\s+files(?:" + _IN + r")?" + _END, re.I)
@@ -271,7 +317,8 @@ FIND_NAME = re.compile(_LEAD + r"(?:find|locate|search\s+for|look\s+for|where(?:
                        r"(?:the\s+|my\s+|all\s+|any\s+|a\s+|me\s+|this\s+)*(?P<object>(?:(?:" + _KIND_WORDS + r")\s+)?"
                        r"(?:files?|folders?|directories|dirs?)\s+"
                        r"(?:named|called|matching|like|with\s+(?:the\s+)?name)?\s*)?"
-                       r"(?P<name>\"[^\"]+\"|'[^']+'|\S+)(?P<noun>\s+(?:file|folder|directory))?(?:" + _IN + r")?"
+                       r"(?P<name>\"[^\"]+\"|'[^']+'|\S+)(?:\s+(?P<kind>" + _KIND_WORDS + r"))?(?P<noun>\s+(?:file|folder|directory))?"
+                       r"(?:" + _IN + r")?"
                        + _END, re.I)
 
 _LOOKS_LIKE_A_FILE = re.compile(r"[*?]|\.[A-Za-z0-9]{1,8}$")
@@ -289,7 +336,7 @@ def plan(text):
     """The Plan for a line that asks for a local command, or None."""
     if not enabled() or not text or len(text) > 400:
         return None
-    text = " ".join(text.split())
+    text = tidy_line(text)
     try:
         found = _plan(text)
     except Outside as error:
@@ -362,12 +409,19 @@ def _machine(text):
         return Plan("table", ["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "overlay",
                          "-x", "fuse.snapfuse"],
                     title="disk space", limit=15)
-    if MEMORY.search(text):
+    if MEMORY.search(text) and _MACHINE_MEMORY.search(text) and not _SOMEONE_ELSES_MEMORY.search(text):
         return Plan("table", ["free", "-h"], title="memory", limit=5)
+    if CPU.search(text):
+        return Plan("table", ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%cpu"],
+                    title="top processes by cpu", limit=8)
+    if PROCESSES.match(text):
+        return Plan("table", ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%cpu"],
+                    title="running processes", limit=15)
     if UPTIME.search(text):
         return Plan("lines", ["uptime", "-p"], title="uptime", limit=1)
     found = RUNNING.match(text)
-    if found and found.group("name").lower() not in _NOT_PROGRAMS:
+    # "is python.org up" names a site (web_inspect checks it), not a program called python.org.
+    if found and found.group("name").lower() not in _NOT_PROGRAMS and not _A_DOMAIN.match(found.group("name")):
         name = found.group("name")
         return Plan("running", ["pgrep", "-a", "-i", "--", name], title="is %s running" % name, limit=10,
                     name=name)
@@ -385,7 +439,10 @@ def _sizes(text):
     found = LINES.match(text)
     if found:
         path = resolve(found.group("path"), "file")
-        if path and not is_secret(path):
+        if path and is_secret(path):
+            return Plan("refuse", [], title="lines", reason="%s looks like a secrets file, so I won't read it."
+                        % os.path.basename(path))
+        if path:
             return Plan("wc", ["wc", "-l", "--", path], title="lines", limit=1)
     found = SIZE.match(text)
     if found:
@@ -402,11 +459,16 @@ def _show(text):
         path = resolve(found.group("path"), "file")
         n = min(int(found.group("n")), 500)
         want = ("tail" if found.group("which").lower() in ("last", "bottom") else "head", n)
+    elif HEAD_TAIL.match(text):
+        found = HEAD_TAIL.match(text)
+        path = resolve(found.group("path"), "file")
+        n = min(int(found.group("n") or found.group("m") or (20 if found.group("tool").lower() == "tail" else 40)), 500)
+        want = (found.group("tool").lower(), n)
     else:
-        found = SHOW.match(text)
+        found = SHOW.match(text) or SHOW_WHATS_IN.match(text)
         if not found:
             return None
-        path = resolve(found.group("path"), "file")
+        path = resolve(found.group("path"), "file") or _usual_file(found.group("path"))
         want = ("head", 40)
     if not path:
         return None
@@ -417,7 +479,24 @@ def _show(text):
     return Plan("file", [tool, "-n", str(n), "--", path], title="%s %d lines" % (tool, n), limit=n, path=path)
 
 
+def _usual_file(token):
+    """README.md for "readme": a file every project has, in the work folder, named without its ending."""
+    token = (token or "").strip().strip("\"'").lower()
+    if token not in _USUAL_FILES:
+        return None
+    try:
+        names = sorted(os.listdir(workdir()))
+    except OSError:
+        return None
+    hits = [n for n in names if n.lower() == token or n.lower().split(".")[0] == token]
+    hits = [os.path.join(workdir(), n) for n in hits if os.path.isfile(os.path.join(workdir(), n))]
+    return hits[0] if hits else None
+
+
 def _list(text):
+    if MY_FOLDERS.match(text):
+        # "list my folders": the folders in home, one level down
+        return _folders(home())
     found = LIST.match(text)
     if not found:
         return None
@@ -425,10 +504,14 @@ def _list(text):
     if not path:
         return None
     if re.search(r"\b" + _DIRS + r"\b", text[:found.start("path")], re.I):
-        # "list all the folders in ~": every folder one level down, except the secrets folders
-        argv = ["find", path, "-mindepth", "1", "-maxdepth", "1"] + _prune_args(caches=False) + ["-type", "d", "-print"]
-        return Plan("files", argv, title="folders", limit=60, root=path, sort=True)
+        return _folders(path)
     return Plan("listing", ["ls", "-lAh", "--group-directories-first", "--", path], title="listing", limit=40)
+
+
+def _folders(path):
+    """Every folder one level down in path, except the secrets folders ("list all the folders in ~")."""
+    argv = ["find", path, "-mindepth", "1", "-maxdepth", "1"] + _prune_args(caches=False) + ["-type", "d", "-print"]
+    return Plan("files", argv, title="folders", limit=60, root=path, sort=True)
 
 
 def _grep_argv(pattern, root):
@@ -441,19 +524,21 @@ def _grep_argv(pattern, root):
 
 
 def _grep(text):
-    for pattern in (GREP_WHICH, GREP_WHERE, GREP_IN):
+    for pattern in (GREP_TYPED, GREP_WHICH, GREP_WHERE, GREP_PLACE_FIRST, GREP_IN, GREP_ANY):
         found = pattern.match(text)
         if not found:
             continue
         query = _unquote(found.group("q"))
-        if pattern is GREP_IN:
+        if pattern is GREP_ANY and re.match(r"^[A-Z]{3,}s$", query):
+            query = query[:-1]  # "any TODOs" looks for TODO
+        if pattern in (GREP_IN, GREP_ANY):
             # "search for *.pdf in downloads" and "find files named x in y" are finds, not greps.
             if _LOOKS_LIKE_A_FILE.search(query) or re.search(r"\b(?:files?|folders?|directories)\b",
                                                               query, re.I):
                 return None
         root = _path_or(found, workdir(), "any")
         if not root or len(query) < 2:
-            return None
+            continue
         return Plan("grep", _grep_argv(query, root), title="search for \"%s\"" % query, limit=20,
                     root=root, query=query)
     return None
@@ -507,17 +592,23 @@ def _find_by_name(text):
     if found:
         name = _unquote(found.group("name"))
         named_a_path = bool(found.groupdict().get("path"))
-        filelike = bool(found.group("object") or found.group("noun") or _LOOKS_LIKE_A_FILE.search(name))
+        kind = (found.group("kind") or "").lower()
+        filelike = bool(found.group("object") or found.group("noun") or kind or _LOOKS_LIKE_A_FILE.search(name))
         if not filelike and not named_a_path:
             return None  # "where is paris" is not a file search
-        default = home() if re.match(_LEAD + r"(?:where|locate)", text, re.I) else workdir()
-        root = _path_or(found, default)
+        if kind and len(name) < 3:
+            return None
+        # A name with no folder is looked for in the whole home folder: "find taxes-2025.pdf"
+        # should not come back empty because the file is not under the work folder.
+        root = _path_or(found, home())
         if not root or len(name) < 2:
             return None
         pattern = name if re.search(r"[*?]", name) else "*%s*" % name
         objects = (found.group("object") or "") + (found.group("noun") or "")
         type_test = ["-type", "d"] if re.search(r"folder|director|dir", objects, re.I) else []
-        return _find(root, ["-iname", pattern] + type_test + ["-print"], "files named %s" % name)
+        kind_test = _name_tests(KINDS[kind]) if kind else []
+        return _find(root, ["-iname", pattern] + kind_test + type_test + ["-print"],
+                     "%s files named %s" % (kind, name) if kind else "files named %s" % name)
     return None
 
 

@@ -164,7 +164,7 @@ def _delete(kind, item, label):
 
 # --- reminders ----------------------------------------------------------------------------------
 
-REMIND = re.compile(_LEAD + r"(?:remind\s+me|set\s+(?:a\s+|an\s+)?(?:reminder|alarm)|add\s+a\s+reminder|reminder\s*:)\s*(?P<rest>.*?)\s*[.!]*\s*$",
+REMIND = re.compile(_LEAD + r"(?:remind\s+me|set\s+(?:a\s+|an\s+)?(?:reminder|alarm)(?!s\s*[?.!]*\s*$)|add\s+a\s+reminder|reminder\s*:)\s*(?P<rest>.*?)\s*[.!]*\s*$",
                     re.I)
 REMINDERS_LIST = re.compile(_LEAD + r"(?:(?:show|list|give)\s+(?:me\s+)?(?:all\s+)?my\s+reminders|what\s+(?:are\s+my|reminders\s+do\s+i\s+have)"
                             r"(?:\s+reminders)?|my\s+reminders|any\s+reminders|do\s+i\s+have\s+any\s+reminders)" + _END, re.I)
