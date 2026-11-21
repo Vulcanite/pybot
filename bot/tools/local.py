@@ -305,8 +305,14 @@ FIND_KIND = re.compile(_LEAD + r"(?:(?:find|list|show(?:\s+me)?|get|locate|searc
                        r"do\s+i\s+have)\s+|(?=any\s))"
                        r"(?:all\s+|the\s+|my\s+|any\s+|me\s+)*(?P<kind>" + _KIND_WORDS + r")\s+files"
                        r"(?:" + _IN + r")?" + _END, re.I)
-FIND_BIG = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?|what\s+are)?\s*(?:the\s+)?(?:(?P<top>\d{1,3})\s+)?"
-                      r"(?:largest|biggest)\s+files(?:" + _IN + r")?" + _END, re.I)
+FIND_BIG = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?|what(?:'s|\s+is|\s+are))?\s*(?:the\s+)?(?:(?P<top>\d{1,3})\s+)?"
+                      r"(?:largest|biggest)\s+(?:(?P<kind>" + _KIND_WORDS + r")\s+)?(?P<files>files?)(?:" + _IN + r")?"
+                      + _END, re.I)
+# "the newest file in ~/Downloads", "latest 5 pdf files": newest first, with no time limit.
+FIND_NEWEST = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?|what(?:'s|\s+is|\s+are))?\s*(?:the\s+|my\s+)?"
+                         r"(?:(?P<top>\d{1,3})\s+)?(?:newest|latest|most\s+recent(?:ly\s+(?:modified|changed))?|"
+                         r"last\s+(?:modified|changed))\s+(?:(?P<kind>" + _KIND_WORDS + r")\s+)?(?P<files>files?)"
+                         r"(?:" + _IN + r")?" + _END, re.I)
 FIND_OVER = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?)?\s*(?:all\s+|any\s+)?files\s+(?:bigger|larger|over|above|more)"
                        r"\s+(?:than\s+)?(?P<n>\d+(?:\.\d+)?)\s*(?P<unit>k|kb|m|mb|g|gb)\b(?:" + _IN + r")?" + _END, re.I)
 FIND_RECENT = re.compile(_LEAD + r"(?:find|list|show(?:\s+me)?|what\s+are)?\s*(?:the\s+)?(?:(?:recently|recent)\s+)?"
@@ -515,7 +521,8 @@ def _folders(path):
 
 
 def _grep_argv(pattern, root):
-    argv = ["grep", "-rnIi", "--color=never", "-m", str(GREP_PER_FILE)]
+    # -H: name the file even when the search is a single file, so every line reads "path:line:text".
+    argv = ["grep", "-rnHIi", "--color=never", "-m", str(GREP_PER_FILE)]
     for name in PRUNE + tuple(d for d in SECRET_DIRS if "/" not in d):
         argv.append("--exclude-dir=" + name)
     for glob in SECRET_GLOBS:
@@ -557,9 +564,24 @@ def _find_by(text):
         root = _path_or(found, workdir())
         if not root:
             return None
-        top = min(int(found.group("top") or 10), 50)
-        return _find(root, ["-type", "f", "-size", "+100k", "-printf", "%s\\t%p\\n"], "largest files",
-                     kind="sized", limit=top)
+        one = found.group("files").lower() == "file"
+        top = min(int(found.group("top") or (1 if one else 10)), 50)
+        kind = (found.group("kind") or "").lower()
+        # Without a kind, small files can't be the biggest; with one ("the biggest log file") they can.
+        tests = _name_tests(KINDS[kind]) if kind else ["-size", "+100k"]
+        return _find(root, tests + ["-type", "f", "-printf", "%s\\t%p\\n"],
+                     "largest %sfiles" % (kind + " " if kind else ""), kind="sized", limit=top)
+    found = FIND_NEWEST.match(text)
+    if found:
+        root = _path_or(found, workdir())
+        if not root:
+            return None
+        one = found.group("files").lower() == "file"
+        top = min(int(found.group("top") or (1 if one else 10)), 50)
+        kind = (found.group("kind") or "").lower()
+        tests = _name_tests(KINDS[kind]) if kind else []
+        return _find(root, tests + ["-type", "f", "-printf", "%T@\\t%p\\n"],
+                     "newest %sfiles" % (kind + " " if kind else ""), kind="recent", limit=top)
     found = FIND_OVER.match(text)
     if found:
         root = _path_or(found, workdir())
