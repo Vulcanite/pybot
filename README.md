@@ -152,6 +152,14 @@ remember about me", "forget that i use arch" and "forget everything about me" al
 yourself (the safer form where there is one: `rm -i`, `rm -rI`, `mv -i`, `--force-with-lease`), plus a
 warning naming a preview command to run first. Paths outside home and secrets get a refusal instead.
 
+Chains (`bot/modules/chain_tools.py`, `bot/tools/chain.py`): two or three local asks in one line,
+"show me README.md and then count its lines", "search for TODO in ~/projects, then open the first
+one", "find files changed today in ~/projects and search them for TODO". Each step is planned and
+run like a line of its own; a later step that says "it", "its", "them" or "the first one" is
+rewritten with the path the step before found. A chain stops when a step is refused, finds nothing,
+or finds several where "it" needs one, and a step that would change something is never run. The
+next line or two can point back too: "show the errors in it", "open the second one".
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
