@@ -366,6 +366,14 @@
 {"id": "capability-020", "group": "capability", "line": "can you believe it rained again", "expect": {"capability": false}, "status": "pass", "owner": "B", "note": "not a question about PyBot"}
 {"id": "capability-021", "group": "capability", "line": "you can do it!", "expect": {"capability": false}, "status": "pass", "owner": "B", "note": "not a question about PyBot"}
 {"id": "capability-022", "group": "capability", "line": "can you pass me the salt", "expect": {"capability": false}, "status": "pass", "owner": "B", "note": "not a question about PyBot"}
+{"id": "capability-023", "group": "capability", "line": "can you add new content to a file?", "expect": {"capability": true, "no_search": true, "capability_has": ["edit"]}, "status": "pass", "owner": "B", "note": "found by hand testing"}
+{"id": "capability-024", "group": "capability", "line": "can you append text to my files", "expect": {"capability": true, "no_search": true, "capability_has": ["edit"]}, "status": "pass", "owner": "B", "note": "found by hand testing"}
+{"id": "capability-025", "group": "capability", "line": "who are you?", "expect": {"capability": true, "no_search": true, "capability_has": ["PyBot"]}, "status": "pass", "owner": "B", "note": "found by hand testing"}
+{"id": "capability-026", "group": "capability", "line": "are you an AI?", "expect": {"capability": true, "no_search": true, "capability_has": ["no AI model"]}, "status": "pass", "owner": "B", "note": "found by hand testing"}
+{"id": "capability-027", "group": "capability", "line": "what are you", "expect": {"capability": true, "no_search": true, "capability_has": ["rules"]}, "status": "pass", "owner": "B", "note": "found by hand testing"}
+{"id": "capability-028", "group": "capability", "line": "who are you going to vote for", "expect": {"capability": false}, "status": "pass", "owner": "B", "note": "chat about the person, not a capability question"}
+{"id": "capability-029", "group": "capability", "line": "what are you doing tonight", "expect": {"capability": false}, "status": "pass", "owner": "B", "note": "chat about the person, not a capability question"}
+{"id": "capability-030", "group": "capability", "line": "can you add salt to the soup", "expect": {"capability": false}, "status": "pass", "owner": "B", "note": "chat about the person, not a capability question"}
 {"id": "memory-001", "group": "memory", "line": "remember that I use Arch", "expect": {"stores": "arch"}, "status": "pass", "owner": "C", "note": "persistent memory"}
 {"id": "memory-002", "group": "memory", "line": "my name is Sam", "expect": {"stores": "sam"}, "status": "pass", "owner": "C", "note": "persistent memory"}
 {"id": "memory-003", "group": "memory", "line": "i live in Singapore", "expect": {"stores": "singapore"}, "status": "pass", "owner": "C", "note": "persistent memory"}

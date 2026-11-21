@@ -45,8 +45,11 @@ _TAIL = r"(?:\s+(?:on|in|from|of)\s+" + _MY + r"(?:computer|pc|laptop|machine|sy
 _TOPICS = (
     ("delete", r"(?:delete|remove|rm|erase|wipe|trash|kill|move|rename|clean\s+up)\s+" + _MY +
      r"(?:files?|folders?|directories|documents?|things|stuff|processes|programs)" + _TAIL),
-    ("edit", r"(?:edit|change|modify|write\s+to|write|create|make|save|overwrite|fix)\s+" + _MY +
-     r"(?:files?|folders?|documents?|code)" + _TAIL),
+    ("edit", r"(?:edit|change|modify|update|write\s+to|write|create|make|save|overwrite|fix|append\s+to)\s+" + _MY +
+     r"(?:files?|folders?|documents?|code)" + _TAIL +
+     # "add new content to a file", "append text to my files", "write stuff into a document"
+     r"|(?:add|append|put|insert|write)\s+(?:new\s+|more\s+|some\s+|extra\s+)?(?:content|text|lines?|stuff|things|"
+     r"data|words)\s+(?:to|into|in)\s+(?:a\s+|an\s+|existing\s+|the\s+)*" + _MY + r"(?:files?|documents?)" + _TAIL),
     ("search_files", r"(?:search|grep|look\s+(?:through|inside|in)|go\s+through|find\s+(?:things|stuff|text|words)\s+in|"
      r"find)\s+(?:in(?:side)?\s+|through\s+)?" + _MY + _FILES + _TAIL),
     ("read_files", r"(?:read|open|see|look\s+at|view|access|get\s+(?:to|into)|show(?:\s+me)?|list|browse)\s+" + _MY + _FILES + _TAIL +
@@ -198,6 +201,22 @@ def _reply(topic, on):
     return None
 
 
+# "who are you?", "what are you", "are you an AI?", "is this chatgpt": what PyBot is, in one breath.
+_WHO = re.compile(
+    r"^\s*(?:(?:hey|hi|hello|ok|okay|so|and|pybot|bot)[,!\s]+)*(?:who|what)\s+(?:are|r)\s+(?:you|u)(?:\s+exactly|\s+really)?|"
+    r"^\s*(?:are\s+(?:you|u)|is\s+this)\s+(?:an?\s+)?(?:ai|llm|bot|robot|chat\s*gpt|gpt|language\s+model|real\s+person|human)|"
+    r"^\s*what(?:'s|\s+is)\s+pybot|^\s*who\s+(?:made|built|wrote|created)\s+(?:you|u|pybot)", re.I)
+_WHO_END = re.compile(r"\s*[?.!]*\s*$")
+
+
+def _who():
+    return ("I'm PyBot: a chatbot made entirely of rules, with no AI model, no weights and no training. "
+            "A swarm of agents at Hugging Face wrote the chat part as if-else branches, patterns and lookup "
+            "tables; on this machine I also have tools that read your files, run read-only commands, keep "
+            "notes and remember things you tell me, all inside your home folder. Ask \"what can you do?\" "
+            "for the list.")
+
+
 def answer(text):
     """The reply to a question about what PyBot can do, or None when the line is not one."""
     if not text or len(text) > 200:
@@ -206,6 +225,9 @@ def answer(text):
     on = _state()
     if _OVERVIEW.match(line):
         return _overview(on)
+    found = _WHO.match(line)
+    if found and _WHO_END.match(line[found.end():]):
+        return _who()
     found = _ASK.match(line)
     if not found or local.plan(line) is not None:
         return None  # "can you show me README.md" is an ask to do it: local_tools runs it
