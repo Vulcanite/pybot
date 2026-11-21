@@ -144,6 +144,14 @@ number. A new chat starts with the kept facts, so "what's my name?" works there.
 remember about me", "forget that i use arch" and "forget everything about me" always work (a bare
 "forget everything" asks first); `--read-only` keeps nothing new.
 
+### Commands that change things: shown, never run
+
+`bot/modules/suggest_tools.py` (rules in `bot/tools/suggest.py`) takes "delete all .log files in ~/tmp",
+"rm -rf build", "move notes.md to ~/Documents", "kill process 1234", "uninstall docker",
+"git push --force" and the like. PyBot runs none of them. It replies with the exact command to run
+yourself (the safer form where there is one: `rm -i`, `rm -rI`, `mv -i`, `--force-with-lease`), plus a
+warning naming a preview command to run first. Paths outside home and secrets get a refusal instead.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
