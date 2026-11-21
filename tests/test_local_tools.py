@@ -173,6 +173,52 @@ class Replies(Scratch):
 
     def test_count(self):
         self.assertIn("2 files", self.reply("how many python files in app"))
+        self.assertIn("2 files", self.reply("count the python files in app"))
+
+    def test_a_listing_hides_secret_names(self):
+        os.makedirs(os.path.join(self.dir, ".ssh"))
+        said = self.reply("what's in here")
+        self.assertNotIn(".ssh", said)
+        self.assertNotIn(".env", said)
+        self.assertIn("config.ini", said)
+        self.assertIn("(2 hidden: secrets)", said)
+
+
+class Wording(Scratch):
+    def test_loose_wording_reads_as_the_same_ask(self):
+        cases = {
+            "show me app/main.py please": ("file", "head"),
+            "read this file: app/main.py": ("file", "head"),
+            "what's in app/main.py": ("file", "head"),
+            "head app/main.py": ("file", "head"),
+            "tail -n 3 app/main.py": ("file", "tail"),
+            "whats in notes": ("listing", "ls"),
+            "search app for TODO": ("grep", "grep"),
+            "search inside app for helper pls": ("grep", "grep"),
+            "which files have TODO in them": ("grep", "grep"),
+            "any TODOs in app?": ("grep", "grep"),
+            "grep -rn TODO .": ("grep", "grep"),
+            "any python files in here?": ("files", "find"),
+            "what processes are running": ("table", "ps"),
+            "what's my cpu usage": ("table", "ps"),
+        }
+        for line, (kind, program) in cases.items():
+            found = local.plan(line)
+            self.assertIsNotNone(found, line)
+            self.assertEqual((found.kind, found.argv[0]), (kind, program), line)
+        self.assertEqual(local.plan("any TODOs in app?").extra["query"], "TODO")
+        self.assertEqual(local.plan("tail -n 3 app/main.py").argv[:3], ["tail", "-n", "3"])
+
+    def test_secrets_are_refused_in_every_wording(self):
+        for line in ("how many lines in .env", "read this file: .env", "open this file .env please"):
+            found = local.plan(line)
+            self.assertEqual(found.kind, "refuse", line)
+
+    def test_not_about_this_machine(self):
+        for line in ("how much memory does a goldfish have", "is python.org up", "is example.com running",
+                     "head home", "any luck in there", "search the web for cats"):
+            self.assertIsNone(local.plan(line), line)
+        self.assertEqual(local.plan("how much memory do i have").argv[0], "free")
 
 
 class Module(Scratch):

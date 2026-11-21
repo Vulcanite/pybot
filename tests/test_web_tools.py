@@ -228,6 +228,23 @@ class Modules(unittest.TestCase):
         self.assertEqual(result["module"], "web_search")
         self.assertIn("example.org", result["reply"])
 
+    @mock.patch.dict(os.environ, {"EXA_API_KEY": "test", "PYBOT_WEB": "1"})
+    def test_a_search_of_a_folder_or_of_the_person_is_not_a_web_search(self):
+        from bot.modules import web_search
+        home = os.path.realpath(os.path.expanduser("~"))
+        with mock.patch.dict(os.environ, {"PYBOT_HOME": home, "PYBOT_WORKDIR": home, "PYBOT_LOCAL": "1"}):
+            self.assertFalse(web_search.TAKES_AS_IT_COMES("search %s for TODO" % home, {}))
+        for line in ("search my feelings", "search my soul", "can you search the web?"):
+            self.assertFalse(web_search.TAKES_AS_IT_COMES(line, {}), line)
+        for line in ("search my name online", "search for exa pricing"):
+            self.assertTrue(web_search.TAKES_AS_IT_COMES(line, {}), line)
+
+    @mock.patch.dict(os.environ, {"EXA_API_KEY": "test", "PYBOT_WEB": "1"})
+    def test_a_domain_is_a_site_not_a_program(self):
+        from bot.modules import local_tools, web_inspect
+        self.assertTrue(web_inspect.TAKES_AS_IT_COMES("is python.org up?", {}))
+        self.assertFalse(local_tools.TAKES_AS_IT_COMES("is python.org up?", {}))
+
     @mock.patch.dict(os.environ, {"EXA_API_KEY": "", "PYBOT_WEB": "1"})
     def test_no_key_no_search(self):
         with mock.patch.object(exa, "search", side_effect=AssertionError("searched")):

@@ -15,7 +15,9 @@ in hand is the shrug. It replaces the reply only when:
 - the chosen reply came from the fallback band (PRIORITY below 0) and is a shrug or a "no live
   view" note;
 - the line is a question about the world: understood "kind" is "question" and it is not about
-  the person ("first_person"), so nothing they said about themselves is sent to a search service.
+  the person ("first_person"), so nothing they said about themselves is sent to a search service;
+- and it is not a question about PyBot itself ("can you ...", "do you ...", "are you ...", "what
+  can you do"): no page on the web knows what this bot can do.
 """
 import re
 
@@ -30,9 +32,28 @@ _SHRUG = re.compile(r"\b(?:can'?t see|cannot see|no live|from here|rather not gu
                     r"beyond what i know|don'?t know enough)\b", re.I)
 
 
+# "can you ...", "do you ...", "are you ...", "what can you ...": a question about PyBot itself,
+# which no web page answers. "can you tell me ..." and "do you know ..." ask about the world.
+_ABOUT_THE_BOT = re.compile(
+    r"^\W*(?:(?:hey|hi|ok|okay|so|and|but|pybot|bot)[,!\s]+)*"
+    r"(?:(?:can|could|will|would|do|does|did|are|were|have|r)\s+(?:you|u|ya)\b"
+    r"(?!\s+(?:please\s+)?(?:tell|show|give|explain|find|search|look|check|recommend|suggest|name|list|describe|"
+    r"define|translate|summari[sz]e|compare|teach|know|think|reckon|have\s+any\s+idea)\b)|"
+    r"what\s+(?:else\s+)?(?:can|could|do|will|would|are)\s+(?:you|u)\s+(?:do|able|capable|good|for|like|made|"
+    r"run|use)\b|(?:who|what)\s+are\s+(?:you|u)\b|is\s+it\s+possible\s+for\s+(?:you|u)\b)", re.I)
+
+
+def about_the_bot(text):
+    """True for a question about PyBot itself: answered from the capability table, never searched."""
+    from . import capabilities  # noqa: PLC0415 - it imports local and notes
+    return bool(_ABOUT_THE_BOT.search(text or "")) or capabilities.answer(text or "") is not None
+
+
 def wants_the_web(text, memory, result):
     """True when this turn's chosen reply is a shrug the web can do better than."""
     if not exa.available() or not isinstance(result, dict):
+        return False
+    if about_the_bot(text):
         return False
     chosen = result.get("module")
     priority = next((c.get("priority", 0) for c in result.get("candidates") or [] if c.get("module") == chosen), -1)
