@@ -92,6 +92,48 @@ Every turn, each module in `bot/modules/` may propose a reply, and an arbiter (`
 
 The modules themselves are another 81,000 lines.
 
+## Web tools (added on the `web-tools` branch)
+
+The swarm's bot answers only from what it holds. This branch lets it reach the web, and the
+"tool calls" are rules too: a module's pattern decides that a line wants the web, and the reply
+is picked from what came back by word overlap. No model is involved at any step.
+
+| Module | Fires on | Does |
+|---|---|---|
+| `bot/modules/web_search.py` | "search for ...", "look up ...", "google ...", "look that up" | Exa search, says the best sentences and the source |
+| `bot/modules/web_lookup.py` | a question about the world that the bot would otherwise shrug at ("I'd rather not guess", "I can't see the news from here") | the same search, in place of the shrug |
+| `bot/modules/web_inspect.py` | "is github.com down", "check the headers on example.com", "what does example.com say", a bare link, "open the first one" | status, timing, TLS certificate and security headers, or the page's opening text through [agent-browser](https://github.com/vercel-labs/agent-browser) |
+
+| `bot/modules/local_tools.py` | "find all python files in src", "search for TODO in ~/projects", "show me README.md", "what's in ~/Downloads", "git status", "how much disk space do i have", "what's using port 8080", "is ollama running" | turns the line into one fixed, read-only command (find, grep, head, ls, du, wc, git, df, free, ps, ss, pgrep), runs it without a shell, and says what it found |
+
+| `bot/modules/local_tools.py` (more) | "how do i use rsync", "history of pybot.py", "who last changed line 40 of x.py", "show me the diff for README.md", "errors in app.log", "what's in package.json", "sha256 of x.iso", "when was x last modified", "what's the ip of github.com", "is port 443 open on example.com" | `man`, `git log/blame/diff`, `grep` for error lines, a manifest reader, `sha256sum`, `stat`, a DNS lookup, a TCP connect |
+| `bot/modules/quick_tools.py` | "what time is it", "time in Tokyo", "convert 5 GB to MB", "1700000000 to a date", "base64 decode ...", "255 to hex", "url encode ...", "pretty print {...}", "generate a uuid / password" | worked out in Python; plain arithmetic and km-to-miles stay with the bot's own maths |
+| `bot/modules/note_tools.py` | "make a note that ...", "show my notes", "remind me to ... in 20 minutes / at 5pm / tomorrow at 9", "my reminders", "save that to notes.md", "save example.com as markdown" | notes and reminders in `~/.pybot/notes.json`; the chat prints reminders when they fall due |
+
+Everything local stays inside the home folder: a path that resolves outside it (`/etc`, `/mnt/c`, a
+symlink that points out) is refused, commands run with a working directory inside home, and
+`~/.ssh`, `~/.gnupg`, `~/.aws` and other secrets folders are never listed, searched or shown.
+
+The local commands only read: nothing deletes, moves, writes or runs code, and the person's words
+only fill in arguments (a name, a pattern, a folder that must exist). Secrets files (`.env`,
+SSH keys, `*.pem`, ...) are never shown or searched, and key or password values in output are
+masked. `--no-local` turns them off. The notes tools are the only ones that write: only inside
+home, never over an existing file unless the line says "overwrite"; `--read-only` turns writing off.
+
+The shared code is in `bot/tools/`. Setup:
+
+```sh
+echo 'EXA_API_KEY=your-key' > .env      # .env is gitignored; pybot.py reads it
+npm install -g agent-browser             # optional: reads pages that need JavaScript
+python -m pybot -v                       # -v shows which module answered
+python -m pybot --offline                # the swarm's bot, with no web at all
+```
+
+Without `EXA_API_KEY` the search modules never fire. Site checks only fetch public addresses:
+localhost, private ranges and cloud metadata addresses are refused, every redirect is checked
+again, and the connection is pinned to the address that was checked. `web_lookup` never sends a
+line about the person themselves to the search service. Tests: `python -m unittest discover -s tests`.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

@@ -5,3 +5,6 @@ __pycache__/
 build/
 dist/
 .DS_Store
+
+# Local secrets (EXA_API_KEY)
+.env
