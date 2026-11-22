@@ -165,8 +165,7 @@ def watch_reminders(every=10):
             except Exception:  # noqa: BLE001 - a bad notes file must not end the chat
                 due = []
             for item in due:
-                print("\n[reminder #%d] %s (set for %s)\n%s" % (item["id"], item["text"], item["due"].replace("T", " "),
-                                                               USER_PREFIX), end="", flush=True)
+                print("\n%s\n%s" % (notes.announce(item), USER_PREFIX), end="", flush=True)
             time.sleep(every)
 
     thread = threading.Thread(target=loop, name="pybot-reminders", daemon=True)

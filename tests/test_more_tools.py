@@ -160,6 +160,50 @@ class Notes(Fenced):
             self.assertEqual(what, "x", line)
         self.assertIsNone(notes.parse_when("drink water", now)[0])
 
+    def test_when_in_any_order_and_more_dates(self):
+        now = datetime.datetime(2026, 11, 22, 10, 0).astimezone()  # a Sunday
+        cases = {
+            # the day after the time used to be dropped, saving today
+            "at 9:30 tomorrow about the standup": ("2026-11-23 09:30", "the standup"),
+            "to leave at 5 tomorrow": ("2026-11-23 17:00", "leave"),
+            "to call the bank at 4:30pm on thursday": ("2026-11-26 16:30", "call the bank"),
+            "x at 8:00 a.m. tomorrow": ("2026-11-23 08:00", "x"),
+            "x tomorrow morning": ("2026-11-23 09:00", "x"),
+            "x this evening": ("2026-11-22 18:00", "x"),
+            "x tonight at 8": ("2026-11-22 20:00", "x"),
+            "x on friday evening at 7": ("2026-11-27 19:00", "x"),
+            "x tomorrow 9": ("2026-11-23 09:00", "x"),
+            "x for 7pm": ("2026-11-22 19:00", "x"),
+            "x on December 5th": ("2026-12-05 09:00", "x"),
+            "x on 5 dec": ("2026-12-05 09:00", "x"),
+            "x on the 5th of january at 10:15": ("2027-01-05 10:15", "x"),
+            "x on the 25th": ("2026-11-25 09:00", "x"),
+            "x next week": ("2026-11-29 09:00", "x"),
+            "x in 2 months": ("2027-01-22 10:00", "x"),
+            "x in 1 year": ("2027-11-22 10:00", "x"),
+            "run for 2 hours at 6pm": ("2026-11-22 18:00", "run for 2 hours"),
+        }
+        for line, (expected, what) in cases.items():
+            due, said = notes.parse_when(line, now)
+            self.assertIsNotNone(due, line)
+            self.assertEqual((due.strftime("%Y-%m-%d %H:%M"), said), (expected, what), line)
+        for line in ("buy 2 apples", "x on feb 30"):
+            self.assertIsNone(notes.parse_when(line, now)[0], line)
+
+    def test_repeating_and_past_reminders_are_not_saved(self):
+        said = notes.answer("remind me every day at 9 to take my pills")
+        self.assertIn("one-off", said)
+        self.assertIn("remind me to take my pills tomorrow", said)
+        self.assertIn("already passed", notes.answer("remind me to x on 2020-01-01"))
+        self.assertFalse(os.path.exists(notes.store_path()))
+
+    def test_announce_says_when_and_marks_missed(self):
+        now = datetime.datetime(2026, 11, 22, 10, 0).astimezone()
+        item = {"id": 3, "text": "stretch", "due": now.isoformat(timespec="minutes")}
+        self.assertEqual(notes.announce(item, now), "[reminder #3] stretch (due Sun 22 Nov 10:00)")
+        later = now + datetime.timedelta(hours=3)
+        self.assertEqual(notes.announce(item, later), "[reminder #3] stretch (missed, was due Sun 22 Nov 10:00)")
+
     def test_saving_stays_inside_home_and_never_overwrites(self):
         memory = {"turns": [{"user": "hi", "bot": "line one\nline two", "module": "x"}]}
         self.assertIn("Saved the last reply", notes.answer("save that to out.md", memory))

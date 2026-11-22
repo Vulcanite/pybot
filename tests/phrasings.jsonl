@@ -404,3 +404,9 @@
 {"id": "chain-011", "group": "chain", "line": "find my keys and then go to work", "expect": {"chain": false}, "status": "pass", "owner": "D", "note": "not a chain"}
 {"id": "chain-012", "group": "chain", "line": "show me README.md", "expect": {"chain": false}, "status": "pass", "owner": "D", "note": "not a chain"}
 {"id": "chain-013", "group": "chain", "line": "rock and roll then sleep", "expect": {"chain": false}, "status": "pass", "owner": "D", "note": "not a chain"}
+{"id": "notes-023", "group": "notes", "line": "remind me at 9:30 tomorrow about the standup", "expect": {"claims": "note_tools", "no_plan": true}, "status": "pass", "owner": "-", "note": "reminder dates"}
+{"id": "notes-024", "group": "notes", "line": "remind me to call the bank at 4:30pm on thursday", "expect": {"claims": "note_tools", "no_plan": true}, "status": "pass", "owner": "-", "note": "reminder dates"}
+{"id": "notes-025", "group": "notes", "line": "remind me on December 5th to renew my passport", "expect": {"claims": "note_tools", "no_plan": true}, "status": "pass", "owner": "-", "note": "reminder dates"}
+{"id": "notes-026", "group": "notes", "line": "remind me every day at 9 to take my pills", "expect": {"claims": "note_tools", "no_plan": true}, "status": "pass", "owner": "-", "note": "reminder dates"}
+{"id": "notes-027", "group": "notes", "line": "set a reminder for 7pm to call mum", "expect": {"claims": "note_tools", "no_plan": true}, "status": "pass", "owner": "-", "note": "reminder dates"}
+{"id": "notes-028", "group": "notes", "line": "remind me to water the plants this evening", "expect": {"claims": "note_tools", "no_plan": true}, "status": "pass", "owner": "-", "note": "reminder dates"}

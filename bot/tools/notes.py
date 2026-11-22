@@ -172,13 +172,33 @@ REMINDER_DELETE = re.compile(_LEAD + r"(?:cancel|delete|remove|clear|drop)\s+rem
                              re.I)
 
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-_CLOCK = r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm|a\.m\.|p\.m\.)?|(?P<noon>noon|midday|midnight)"
-_WHEN = re.compile(
-    r"\b(?:in\s+(?P<n>\d{1,4}|an?|half\s+an)\s*(?P<unit>minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?)\b"
-    r"|(?P<day>today|tonight|tomorrow|(?:on\s+|next\s+|this\s+)?(?:" + "|".join(_WEEKDAYS) + r")|on\s+\d{4}-\d{2}-\d{2})"
-    r"(?:\s+(?:at\s+)?(?:" + _CLOCK + r"))?"
-    r"|at\s+(?:" + _CLOCK.replace("?P<h>", "?P<h2>").replace("?P<m>", "?P<m2>").replace("?P<ap>", "?P<ap2>")
-    .replace("?P<noon>", "?P<noon2>") + r")(?:\s+(?P<day2>today|tonight|tomorrow))?)", re.I)
+_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+_MONTH = r"(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+_WEEKDAY = r"(?P<wd>" + "|".join(_WEEKDAYS) + r")"
+_PARTS = {"morning": (9, 0), "afternoon": (15, 0), "evening": (18, 0), "night": (20, 0)}
+_PART = r"(?:\s+(?:in\s+the\s+)?(?P<part>morning|afternoon|evening|night))?"
+
+# "every day", "daily", "on mondays": a reminder that repeats, which this store can't do.
+_REPEATS = re.compile(r"\b(?:every\s*(?:day|morning|afternoon|evening|night|week|weekday|month|year|hour|other|\d+)"
+                      r"|(?:every|each)\s+" + _WEEKDAY + r"|on\s+(?:" + "|".join(_WEEKDAYS) + r")s"
+                      r"|daily|weekly|monthly|hourly|yearly)\b", re.I)
+_IN = re.compile(r"\bin\s+(?P<n>\d{1,4}|an?|one|two|three|half\s+an)\s*(?P<unit>months?|minutes?|mins?|m|hours?|hrs?|h"
+                 r"|days?|d|weeks?|wks?|w|years?|yrs?|y)\b", re.I)
+# The day, with an optional part of it ("tomorrow morning", "on friday evening").
+_DATE = re.compile(
+    r"\b(?:(?P<rel>today|tonight|tomorrow)"
+    r"|(?:on\s+|next\s+|this\s+|coming\s+)?" + _WEEKDAY +
+    r"|(?:on\s+)?(?P<iso>\d{4}-\d{2}-\d{2})"
+    r"|(?:on\s+)?(?:the\s+)?(?P<d1>\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?" + _MONTH +
+    r"|(?:on\s+)?" + _MONTH.replace("?P<mon>", "?P<mon2>") + r"\s+(?:the\s+)?(?P<d2>\d{1,2})(?:st|nd|rd|th)?"
+    r"|(?:on\s+)?the\s+(?P<d3>\d{1,2})(?:st|nd|rd|th)"
+    r"|next\s+(?P<next>week|month))\b" + _PART, re.I)
+_PART_ALONE = re.compile(r"\b(?:this|in\s+the)\s+(?P<part>morning|afternoon|evening)\b", re.I)
+_CLOCK = re.compile(r"(?:\b(?:at|by|for|around)\s+|\b|@\s*)(?:(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>[ap]\.?m\.?)(?![a-z])"
+                    r"|(?P<hc>\d{1,2}):(?P<mc>\d{2})\b|(?P<noon>noon|midday|midnight)\b)", re.I)
+_NOT_A_TIME = r"(?!\s*(?:%|[.,]\d|minutes?|mins?|hours?|hrs?|days?|percent))"
+_AT_HOUR = re.compile(r"\b(?:at|around)\s+(?P<h>\d{1,2})\b" + _NOT_A_TIME, re.I)
+_HOUR_AFTER_DAY = re.compile(r"\s+(?P<h>\d{1,2})\b" + _NOT_A_TIME)
 
 
 def _clock_time(h, m, ap, noon):
@@ -197,53 +217,148 @@ def _clock_time(h, m, ap, noon):
     return hour, minute
 
 
+def _add_months(moment, months):
+    year, month = divmod(moment.month - 1 + months, 12)
+    year += moment.year
+    last = [31, 29 if year % 4 == 0 and (year % 100 or year % 400 == 0) else 28, 31, 30, 31, 30,
+            31, 31, 30, 31, 30, 31][month]
+    return moment.replace(year=year, month=month + 1, day=min(moment.day, last))
+
+
+def repeats(rest):
+    """True when a reminder line asks for one that repeats ("every day at 9")."""
+    return bool(_REPEATS.search(rest))
+
+
 def parse_when(rest, now=None):
-    """(due, text without the time words) for a reminder line, or (None, rest) when it gives no time."""
+    """(due, text without the time words) for a reminder line, or (None, rest) when it gives no time.
+
+    The day, the part of the day and the clock time are found apart, so they can come in any order:
+    "at 9:30 tomorrow", "tomorrow at 9:30", "on thursday at 4:30pm", "at 4:30pm on thursday".
+    """
     now = now or _now()
-    found = _WHEN.search(rest)
-    if not found:
-        return None, rest
-    g = found.groupdict()
-    due = None
-    if g["unit"]:
-        amount = {"a": 1, "an": 1}.get((g["n"] or "").lower())
+    spans = []
+    masked = rest
+
+    def take(found):
+        nonlocal masked
+        spans.append(found.span())
+        masked = masked[:found.start()] + " " * (found.end() - found.start()) + masked[found.end():]
+
+    found = _IN.search(masked)
+    if found:
+        take(found)
+        n, unit = found.group("n").lower(), found.group("unit").lower()
+        amount = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}.get(n)
+        if n.startswith("half"):
+            amount, unit = 0.5, "h"
         if amount is None:
-            amount = 0.5 if (g["n"] or "").lower().startswith("half") else int(g["n"])
-        unit = g["unit"].lower()[0]
-        if (g["n"] or "").lower().startswith("half"):
-            unit = "h"
-        minutes = {"m": 1, "h": 60, "d": 24 * 60, "w": 7 * 24 * 60}[unit] * amount
-        due = now + datetime.timedelta(minutes=minutes)
+            amount = int(n)
+        if unit.startswith("mo"):
+            due = _add_months(now, int(amount))
+        elif unit[0] == "y":
+            due = _add_months(now, 12 * int(amount))
+        else:
+            due = now + datetime.timedelta(minutes={"m": 1, "h": 60, "d": 24 * 60, "w": 7 * 24 * 60}[unit[0]] * amount)
+        return due.replace(second=0, microsecond=0), _leftover(rest, spans)
+
+    base, dated, part, date_end = now, False, None, None
+    found = _DATE.search(masked)
+    if found:
+        take(found)
+        date_end = found.end()
+        g = found.groupdict()
+        dated, part = True, (g["part"] or "").lower() or None
+        try:
+            if g["rel"]:
+                rel = g["rel"].lower()
+                dated = rel != "today" and rel != "tonight"
+                if rel == "tomorrow":
+                    base = now + datetime.timedelta(days=1)
+                elif rel == "tonight":
+                    part = part or "night"
+            elif g["wd"]:
+                base = now + datetime.timedelta(days=(_WEEKDAYS.index(g["wd"].lower()) - now.weekday()) % 7 or 7)
+            elif g["iso"]:
+                base = datetime.datetime.strptime(g["iso"], "%Y-%m-%d").replace(tzinfo=now.tzinfo)
+            elif g["next"]:
+                base = now + datetime.timedelta(days=7) if g["next"].lower() == "week" else _add_months(now, 1)
+            elif g["d3"]:
+                base = now.replace(day=int(g["d3"]))
+                if base.date() < now.date():
+                    base = _add_months(now.replace(day=1), 1).replace(day=int(g["d3"]))
+            else:
+                month = _MONTHS.index((g["mon"] or g["mon2"]).lower()[:3]) + 1
+                base = now.replace(month=month, day=int(g["d1"] or g["d2"]))
+                if base.date() < now.date():
+                    base = base.replace(year=now.year + 1)
+        except ValueError:  # the 31st of a short month, 2026-13-40
+            return None, rest
+    if part is None:
+        alone = _PART_ALONE.search(masked)
+        if alone:
+            take(alone)
+            part = alone.group("part").lower()
+
+    clock = None
+    found = _CLOCK.search(masked)
+    if found:
+        g = found.groupdict()
+        clock = _clock_time(g["h"] or g["hc"], g["m"] or g["mc"], g["ap"], g["noon"])
+        bare = not g["ap"] and not g["noon"]
     else:
-        clock = _clock_time(g["h"] or g["h2"], g["m"] or g["m2"], g["ap"] or g["ap2"], g["noon"] or g["noon2"])
-        day = (g["day"] or g["day2"] or "").lower().replace("on ", "").replace("next ", "").replace("this ", "").strip()
-        base = now
-        if day == "tomorrow":
-            base = now + datetime.timedelta(days=1)
-        elif day in _WEEKDAYS:
-            ahead = (_WEEKDAYS.index(day) - now.weekday()) % 7 or 7
-            base = now + datetime.timedelta(days=ahead)
-        elif re.match(r"\d{4}-\d{2}-\d{2}$", day):
-            try:
-                base = datetime.datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=now.tzinfo)
-            except ValueError:
-                return None, rest
-        if clock is None:
-            clock = (20, 0) if day == "tonight" else (9, 0) if day not in ("", "today") else None
+        found = _AT_HOUR.search(masked)
+        if not found and date_end is not None:  # "tomorrow 9"
+            found = _HOUR_AFTER_DAY.match(masked, date_end)
+        if found:
+            clock, bare = _clock_time(found.group("h"), None, None, None), True
+    if found:
         if clock is None:
             return None, rest
-        if day in ("", "today") and g["h2"] and not g["ap2"] and 1 <= clock[0] < 12:
-            # "at 5" said after 5am means 5pm today, while 5pm is still ahead.
-            said, minutes_now = clock[0] * 60 + clock[1], now.hour * 60 + now.minute
-            if said <= minutes_now < said + 12 * 60:
+        take(found)
+        if bare and 1 <= clock[0] < 12:
+            if part in ("afternoon", "evening", "night"):
                 clock = (clock[0] + 12, clock[1])
-        due = base.replace(hour=clock[0], minute=clock[1], second=0, microsecond=0)
-        if due <= now and day in ("", "today"):
-            due += datetime.timedelta(days=1)
-    words = (rest[:found.start()] + " " + rest[found.end():]).strip()
+            elif part is None and not dated:
+                # "at 5" said after 5am means 5pm today, while 5pm is still ahead.
+                said, minutes_now = clock[0] * 60 + clock[1], now.hour * 60 + now.minute
+                if said <= minutes_now < said + 12 * 60:
+                    clock = (clock[0] + 12, clock[1])
+            elif part is None and clock[0] <= 6:
+                clock = (clock[0] + 12, clock[1])  # "at 5 tomorrow": 5pm, not 5am
+    elif part:
+        clock = _PARTS[part]
+    elif dated:
+        clock = (9, 0)
+    else:
+        return None, rest
+    due = base.replace(hour=clock[0], minute=clock[1], second=0, microsecond=0)
+    if due <= now and not dated and not re.search(r"\btoday\b", rest, re.I):
+        due += datetime.timedelta(days=1)
+    return due, _leftover(rest, spans)
+
+
+def _leftover(rest, spans):
+    words, last = [], 0
+    for start, end in sorted(spans):
+        words.append(rest[last:start])
+        last = end
+    words.append(rest[last:])
+    words = re.sub(r"\s+", " ", " ".join(words)).strip()
     words = re.sub(r"^(?:to|that|about|for)\s+", "", words, flags=re.I).strip(" ,.-")
-    words = re.sub(r"\s+(?:to|that)$", "", words, flags=re.I)
-    return due, words
+    words = re.sub(r"\s+(?:to|that|on|at|for|about)$", "", words, flags=re.I)
+    return words
+
+
+def announce(item, now=None):
+    """The line the chat prints when a reminder falls due, marked "missed" when it is shown late."""
+    now = now or _now()
+    try:
+        when = datetime.datetime.fromisoformat(item["due"])
+    except (ValueError, KeyError):
+        return "[reminder #%s] %s" % (item.get("id"), item.get("text"))
+    late = now - when > datetime.timedelta(minutes=2)
+    return "[reminder #%d] %s (%s %s)" % (item["id"], item["text"], "missed, was due" if late else "due", _stamp(when))
 
 
 def _reminders(text):
@@ -261,12 +376,18 @@ def _reminders(text):
     if not found:
         return None
     rest = re.sub(r"^(?:to|that|about|for)\s+", "", found.group("rest"), flags=re.I)
+    if repeats(rest):
+        what = parse_when(_REPEATS.sub(" ", rest))[1] or "..."
+        return ("I can only set one-off reminders, not repeating ones. Say \"remind me to %s tomorrow at 9\" for the "
+                "next one, or put a repeating one in your phone or calendar." % what)
     due, what = parse_when(rest)
     if not what:
         return "What should I remind you about? Say \"remind me to call the bank at 4pm\"."
     if due is None:
         return ("When should I remind you to %s? Add a time, like \"in 20 minutes\", \"at 5pm\" or "
                 "\"tomorrow at 9\"." % what)
+    if due <= _now():
+        return "That time has already passed (%s). Give me a later one." % _stamp(due)
     if not writing_allowed():
         return "Writing is switched off (--read-only), so I can't save reminders right now."
     item = {"id": _load()["next_reminder"], "text": what, "due": due.isoformat(timespec="minutes"),
