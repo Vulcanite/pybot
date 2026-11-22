@@ -17,12 +17,26 @@ A module that fails is skipped; a turn never fails.
 """
 import copy
 import importlib
+import os
 import pkgutil
+import sys
+import traceback
 
 from . import modules
 
 ARBITER = "arbiter"
 FALLBACK = "Hello!"
+
+
+def _report(stage, name):
+    """With PYBOT_DEBUG=1, say on stderr which module failed and how. The turn still goes on.
+
+    Every failure here is swallowed so a turn never fails, which also hid the one that mattered
+    most: on Python 3.8-3.10 the safety module raised on every line, and nothing said so.
+    """
+    if os.environ.get("PYBOT_DEBUG") == "1":
+        print("[pybot] %s failed in %s:" % (name, stage), file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
 
 def load_modules():
@@ -32,6 +46,7 @@ def load_modules():
         try:
             module = importlib.import_module(f"{modules.__name__}.{entry.name}")
         except Exception:  # noqa: BLE001, S112 - preserve the bot interface
+            _report("import", entry.name)
             continue
         priority = getattr(module, "PRIORITY", 0)
         if isinstance(priority, bool) or not isinstance(priority, (int, float)):
@@ -69,6 +84,7 @@ def _choose(text, memory, candidates):
     try:
         picked = _ARBITER(text, memory, views)
     except Exception:  # noqa: BLE001 - preserve the bot interface
+        _report("choose", ARBITER)
         return 0
     if isinstance(picked, int) and not isinstance(picked, bool) and 0 <= picked < len(views):
         return picked
@@ -81,10 +97,11 @@ def _choose(text, memory, candidates):
 
 def turn(text, memory):
     """One turn: {"reply", "module", "candidates"}. Updates memory in place."""
-    for _, _, observe in _OBSERVERS:
+    for name, _, observe in _OBSERVERS:
         try:
             observe(text, memory)
         except Exception:  # noqa: BLE001, S112 - preserve the bot interface
+            _report("observe", name)
             continue
     candidates, copies = [], []
     for name, priority, respond in _HANDLERS:
@@ -92,6 +109,7 @@ def turn(text, memory):
         try:
             answer = respond(text, mine)
         except Exception:  # noqa: BLE001, S112 - preserve the bot interface
+            _report("respond", name)
             continue
         if isinstance(answer, str) and answer.strip():
             candidates.append({"module": name, "priority": priority, "reply": answer})
@@ -104,10 +122,11 @@ def turn(text, memory):
             memory.update(copies[index])
     else:
         reply, module = FALLBACK, None
-    for _, _, after in _AFTER:
+    for name, _, after in _AFTER:
         try:
             after(text, reply, memory)
         except Exception:  # noqa: BLE001, S112 - preserve the bot interface
+            _report("after", name)
             continue
     turns = memory.get("turns")
     if not isinstance(turns, list):

@@ -12,6 +12,7 @@ import argparse
 import os
 import random
 import sys
+import threading
 import time
 
 __version__ = "0.1.0"
@@ -43,6 +44,29 @@ HELP = """Commands:
   /exit    quit (Ctrl+D works too)"""
 
 
+def load_env(path=None):
+    """Read KEY=VALUE lines from the .env next to this file into the environment.
+
+    That is where a local EXA_API_KEY lives (.env is in .gitignore). A variable that is already
+    set wins over the file, so `EXA_API_KEY=... python -m pybot` still works.
+    """
+    path = path or os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        os.environ.setdefault(key, value.strip().strip("\"'"))
+
+
 def load_bot():
     """Import the bot's runtime. The first start compiles every module, so it takes longer."""
     try:
@@ -57,18 +81,35 @@ def load_bot():
 
 
 def answer(runtime, text, memory):
-    """One turn: (reply, module, seconds).
+    """One turn: (reply, module, seconds). A turn never raises.
 
-    Mirrors bot/__main__.py: the reply is one non-empty line, and a turn never raises.
+    Like bot/__main__.py the reply is never empty, and the spaces inside each line are tidied.
+    Its line breaks are kept - the local tools print file lists and command output - and pipe()
+    flattens them, so piped input still gets exactly one reply line per input line.
     """
     start = time.perf_counter()
     try:
         result = runtime.turn(text, memory)
-        reply = " ".join(str(result["reply"]).split()) or "Hello!"
+        result = _search_instead_of_shrugging(text, memory, result)
+        said = str(result["reply"]).strip("\n")
+        if "\n" in said:
+            # Command output: kept as printed (indents, blank lines in a file), ends trimmed.
+            reply = "\n".join(line.rstrip() for line in said.splitlines()) if said.strip() else "Hello!"
+        else:
+            reply = " ".join(said.split()) or "Hello!"
         module = result.get("module")
     except Exception:  # noqa: BLE001 - keep the bot's interface: always one reply
         reply, module = "Hello!", None
     return reply, module, time.perf_counter() - start
+
+
+def _search_instead_of_shrugging(text, memory, result):
+    """After the turn: a shrug from the bot becomes a web search (bot/tools/fallback_search.py)."""
+    try:
+        from bot.tools import fallback_search
+    except Exception:  # noqa: BLE001 - no tools, the bot as it was
+        return result
+    return fallback_search.improve(text, memory, result)
 
 
 def details(module, seconds):
@@ -88,7 +129,7 @@ def pipe(runtime, args):
     memory = {}
     for line in sys.stdin:
         reply, module, seconds = answer(runtime, line.rstrip("\r\n"), memory)
-        print(reply, flush=True)
+        print(" ".join(reply.split()), flush=True)
         if args.verbose:
             print(details(module, seconds), file=sys.stderr, flush=True)
 
@@ -110,6 +151,28 @@ def clear_screen():
         sys.stdout.flush()
 
 
+def watch_reminders(every=10):
+    """Print reminders as they fall due while the chat is open (and missed ones at the start)."""
+    try:
+        from bot.tools import notes
+    except Exception:  # noqa: BLE001 - no tools, no reminders
+        return None
+
+    def loop():
+        while True:
+            try:
+                due = notes.due_now()
+            except Exception:  # noqa: BLE001 - a bad notes file must not end the chat
+                due = []
+            for item in due:
+                print("\n%s\n%s" % (notes.announce(item), USER_PREFIX), end="", flush=True)
+            time.sleep(every)
+
+    thread = threading.Thread(target=loop, name="pybot-reminders", daemon=True)
+    thread.start()
+    return thread
+
+
 def chat(runtime, args):
     """An interactive conversation in the terminal.
 
@@ -122,6 +185,7 @@ def chat(runtime, args):
     except ImportError:
         pass
     opening()
+    watch_reminders()
     memory = {}
     first = args.prompt
     while True:
@@ -153,7 +217,8 @@ def chat(runtime, args):
         if not command:
             continue
         reply, module, seconds = answer(runtime, text, memory)
-        print(BOT_PREFIX + reply)
+        # Later lines of a multi-line reply sit under the first, past the "pybot: " label.
+        print(BOT_PREFIX + reply.replace("\n", "\n" + " " * len(BOT_PREFIX)))
         if args.verbose:
             print(details(module, seconds))
         print()
@@ -175,8 +240,21 @@ def main(argv=None):
                         help="after each reply, show the module that produced it and the time it took")
     parser.add_argument("--version", action="version",
                         version="pybot %s (bot at commit %s)" % (__version__, SOURCE_COMMIT[:12]))
+    parser.add_argument("--offline", action="store_true",
+                        help="no web search or site checks, as the swarm's bot was")
+    parser.add_argument("--no-local", action="store_true",
+                        help="no local commands (finding files, git, disk space, ...)")
+    parser.add_argument("--read-only", action="store_true",
+                        help="no notes, reminders or saved files: nothing is written")
     args = parser.parse_args(argv)
 
+    load_env()
+    if args.offline:
+        os.environ["PYBOT_WEB"] = "0"
+    if args.no_local:
+        os.environ["PYBOT_LOCAL"] = "0"
+    if args.read_only:
+        os.environ["PYBOT_WRITE"] = "0"
     if args.seed is not None:
         random.seed(args.seed)
     interactive = (args.prompt is None and sys.stdin.isatty()) or (args.prompt is not None and args.interactive)

@@ -92,6 +92,74 @@ Every turn, each module in `bot/modules/` may propose a reply, and an arbiter (`
 
 The modules themselves are another 81,000 lines.
 
+## Web tools (added on the `web-tools` branch)
+
+The swarm's bot answers only from what it holds. This branch lets it reach the web, and the
+"tool calls" are rules too: a module's pattern decides that a line wants the web, and the reply
+is picked from what came back by word overlap. No model is involved at any step.
+
+| Module | Fires on | Does |
+|---|---|---|
+| `bot/modules/web_search.py` | "search for ...", "look up ...", "google ...", "look that up" | Exa search, says the best sentences and the source |
+| `bot/tools/fallback_search.py` (run by `pybot.py` after the turn) | a question about the world whose chosen reply was a shrug ("I'd rather not guess", "I can't see the news from here") | the same search, in place of the shrug; it never runs when the bot had a real answer |
+| `bot/modules/web_inspect.py` | "is github.com down", "check the headers on example.com", "what does example.com say", a bare link, "open the first one" | status, timing, TLS certificate and security headers, or the page's opening text through [agent-browser](https://github.com/vercel-labs/agent-browser) |
+| `bot/modules/local_tools.py` | "find all python files in src", "search for TODO in ~/projects", "show me README.md", "what's in ~/Downloads", "git status", "how much disk space do i have", "what's using port 8080", "is ollama running" | turns the line into one fixed, read-only command (find, grep, head, ls, du, wc, git, df, free, ps, ss, pgrep), runs it without a shell, and says what it found |
+| `bot/modules/local_tools.py` (more) | "how do i use rsync", "history of pybot.py", "who last changed line 40 of x.py", "show me the diff for README.md", "errors in app.log", "what's in package.json", "sha256 of x.iso", "when was x last modified", "what's the ip of github.com", "is port 443 open on example.com" | `man`, `git log/blame/diff`, `grep` for error lines, a manifest reader, `sha256sum`, `stat`, a DNS lookup, a TCP connect |
+| `bot/modules/quick_tools.py` | "what time is it", "time in Tokyo", "convert 5 GB to MB", "1700000000 to a date", "base64 decode ...", "255 to hex", "url encode ...", "pretty print {...}", "generate a uuid / password" | worked out in Python; plain arithmetic and km-to-miles stay with the bot's own maths |
+| `bot/modules/capability_tools.py` | "can you read files?", "what can you do?", "can you search the web?", "are you online?", "can you delete files?", "can you set reminders?" | answers from a table of what is switched on in this run (web search, local commands, writing), with a line or two to try; never searched |
+| `bot/modules/note_tools.py` | "make a note that ...", "show my notes", "remind me to ... in 20 minutes / at 5pm / tomorrow at 9", "my reminders", "save that to notes.md", "save example.com as markdown" | notes and reminders in `~/.pybot/notes.json`; the chat prints reminders when they fall due |
+
+Everything local stays inside the home folder: a path that resolves outside it (`/etc`, `/mnt/c`, a
+symlink that points out) is refused, commands run with a working directory inside home, and
+`~/.ssh`, `~/.gnupg`, `~/.aws` and other secrets folders are never listed, searched or shown (a folder
+listing leaves their names out too, and says how many it hid).
+
+The local commands only read: nothing deletes, moves, writes or runs code, and the person's words
+only fill in arguments (a name, a pattern, a folder that must exist). Secrets files (`.env`,
+SSH keys, `*.pem`, ...) are never shown or searched, and key or password values in output are
+masked. `--no-local` turns them off. The notes tools are the only ones that write: only inside
+home, never over an existing file unless the line says "overwrite"; `--read-only` turns writing off.
+
+The shared code is in `bot/tools/`. Setup:
+
+```sh
+echo 'EXA_API_KEY=your-key' > .env      # .env is gitignored; pybot.py reads it
+npm install -g agent-browser             # optional: reads pages that need JavaScript
+python -m pybot -v                       # -v shows which module answered
+python -m pybot --offline                # the swarm's bot, with no web at all
+```
+
+Without `EXA_API_KEY` the search modules never fire. Site checks only fetch public addresses:
+localhost, private ranges and cloud metadata addresses are refused, every redirect is checked
+again, and the connection is pinned to the address that was checked. The fallback search never
+sends a line about the person themselves, or a question about PyBot itself, to the search service. Tests: `python -m unittest discover -s tests`.
+
+Memory across chats (`bot/tools/profile.py`, `bot/modules/profile_tools.py`): a few things about
+you are kept in `~/.pybot/profile.json` (folder 700, file 600), scored by rules. Always kept:
+"remember that ...", "don't forget ...", and standing rules ("always use metric", "call me Sam",
+"i prefer short answers"). Kept: stable facts (name, job, where you live, the OS and tools you
+use, languages, family and pet names, allergies); a new value replaces the old one. Not kept:
+passing states ("i'm tired today") and anything that looks like a password, key, token or card
+number. A new chat starts with the kept facts, so "what's my name?" works there. "what do you
+remember about me", "forget that i use arch" and "forget everything about me" always work (a bare
+"forget everything" asks first); `--read-only` keeps nothing new.
+
+### Commands that change things: shown, never run
+
+`bot/modules/suggest_tools.py` (rules in `bot/tools/suggest.py`) takes "delete all .log files in ~/tmp",
+"rm -rf build", "move notes.md to ~/Documents", "kill process 1234", "uninstall docker",
+"git push --force" and the like. PyBot runs none of them. It replies with the exact command to run
+yourself (the safer form where there is one: `rm -i`, `rm -rI`, `mv -i`, `--force-with-lease`), plus a
+warning naming a preview command to run first. Paths outside home and secrets get a refusal instead.
+
+Chains (`bot/modules/chain_tools.py`, `bot/tools/chain.py`): two or three local asks in one line,
+"show me README.md and then count its lines", "search for TODO in ~/projects, then open the first
+one", "find files changed today in ~/projects and search them for TODO". Each step is planned and
+run like a line of its own; a later step that says "it", "its", "them" or "the first one" is
+rewritten with the path the step before found. A chain stops when a step is refused, finds nothing,
+or finds several where "it" needs one, and a step that would change something is never run. The
+next line or two can point back too: "show the errors in it", "open the second one".
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
